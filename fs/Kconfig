@@ -17,7 +17,12 @@ config VALIDATE_FS_PARSER
 
 config FS_IOMAP
 	bool
-
+config FS_IOMAP_DEBUG_PRINT
+	bool "Enable debug prints for IOMAP code"
+	depends on FS_IOMAP
+	help
+	  mydebug print for IOMAP
+      
 # Stackable filesystems
 config FS_STACK
 	bool

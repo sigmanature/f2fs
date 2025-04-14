@@ -18,8 +18,11 @@
 #include "segment.h"
 #include "xattr.h"
 #include "iostat.h"
+#include "f2fs_ifs.h"
 #include <trace/events/f2fs.h>
-
+#ifdef CONFIG_F2FS_DEBUG_PRINT
+#include "f2fs_dbg.h"
+#endif
 #define on_f2fs_build_free_nids(nm_i) mutex_is_locked(&(nm_i)->build_lock)
 
 static struct kmem_cache *nat_entry_slab;
@@ -790,6 +793,9 @@ static struct folio *f2fs_get_node_folio_ra(struct folio *parent, int start);
  * Also, it should grab and release a rwsem by calling f2fs_lock_op() and
  * f2fs_unlock_op() only if mode is set with ALLOC_NODE.
  */
+#ifdef CONFIG_F2FS_DEBUG_PRINT
+__attribute__((optimize("O0")))
+#endif
 int f2fs_get_dnode_of_data(struct dnode_of_data *dn, pgoff_t index, int mode)
 {
 	struct f2fs_sb_info *sbi = F2FS_I_SB(dn->inode);
@@ -892,7 +898,6 @@ int f2fs_get_dnode_of_data(struct dnode_of_data *dn, pgoff_t index, int mode)
 	dn->ofs_in_node = offset[level];
 	dn->node_folio = nfolio[level];
 	dn->data_blkaddr = f2fs_data_blkaddr(dn);
-
 	if (is_inode_flag_set(dn->inode, FI_COMPRESSED_FILE) &&
 					f2fs_sb_has_readonly(sbi)) {
 		unsigned int cluster_size = F2FS_I(dn->inode)->i_cluster_size;

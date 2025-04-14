@@ -832,16 +832,14 @@ out:
 	f2fs_folio_put(ifolio, true);
 	return err;
 }
-/* fill iomap struct for inline data case for
- *iomap buffered write
- */
-void f2fs_iomap_prepare_read_inline(struct inode *inode, struct folio *ifolio,
-				    struct iomap *iomap, loff_t pos,
-				    loff_t length)
+
+/* fill iomap struct for inline data case for iomap buffered write */
+void f2fs_iomap_prepare_read_inline(struct inode* inode,struct folio* ifolio,struct iomap* iomap,
+loff_t pos,loff_t length)
 {
 	iomap->addr = IOMAP_NULL_ADDR;
 	iomap->length = length;
 	iomap->type = IOMAP_INLINE;
 	iomap->flags = 0;
-	iomap->inline_data = inline_data_addr(inode, ifolio);
+	iomap->inline_data=inline_data_addr(inode, ifolio);
 }

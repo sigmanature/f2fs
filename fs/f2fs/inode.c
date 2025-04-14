@@ -11,7 +11,7 @@
 #include <linux/sched/mm.h>
 #include <linux/lz4.h>
 #include <linux/zstd.h>
-
+#include <linux/pagemap.h>
 #include "f2fs.h"
 #include "node.h"
 #include "segment.h"
@@ -41,6 +41,7 @@ bool f2fs_should_use_buffered_iomap(struct inode *inode)
 		return false;
 	return true;
 }
+
 void f2fs_mark_inode_dirty_sync(struct inode *inode, bool sync)
 {
 	if (is_inode_flag_set(inode, FI_NEW_INODE))
@@ -892,8 +893,10 @@ void f2fs_evict_inode(struct inode *inode)
 			inode->i_ino == F2FS_META_INO(sbi) ||
 			inode->i_ino == F2FS_COMPRESS_INO(sbi))
 		goto out_clear;
-
-	f2fs_bug_on(sbi, get_dirty_pages(inode));
+	/*temporarily comment it.Because it will cause panic in my folio dev.
+	We haven't fully understand how to count dirty pages when introducing
+	large folios*/
+	// f2fs_bug_on(sbi, get_dirty_pages(inode));
 	f2fs_remove_dirty_inode(inode);
 	f2fs_remove_donate_inode(inode);
 

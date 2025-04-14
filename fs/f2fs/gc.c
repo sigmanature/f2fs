@@ -21,8 +21,14 @@
 #include "segment.h"
 #include "gc.h"
 #include "iostat.h"
+#include "f2fs_ifs.h"
 #include <trace/events/f2fs.h>
-
+#ifdef CONFIG_F2FS_DEBUG_PRINT
+#include "f2fs_dbg.h"
+#endif
+#ifdef CONFIG_FS_IOMAP_DEBUG_PRINT
+#include "../fs_dbg.h"
+#endif
 static struct kmem_cache *victim_entry_slab;
 
 static unsigned int count_bits(const unsigned long *addr,
@@ -1224,7 +1230,6 @@ static int ra_data_block(struct inode *inode, pgoff_t index)
 	folio = f2fs_grab_cache_folio(mapping, index, true);
 	if (IS_ERR(folio))
 		return PTR_ERR(folio);
-
 	if (f2fs_lookup_read_extent_cache_block(inode, index,
 						&dn.data_blkaddr)) {
 		if (unlikely(!f2fs_is_valid_blkaddr(sbi, dn.data_blkaddr,
@@ -1262,7 +1267,6 @@ got_it:
 	f2fs_folio_wait_writeback(folio, DATA, true, true);
 
 	f2fs_wait_on_block_writeback(inode, dn.data_blkaddr);
-
 	fio.encrypted_page = f2fs_pagecache_get_page(META_MAPPING(sbi),
 					dn.data_blkaddr,
 					FGP_LOCK | FGP_CREAT, GFP_NOFS);
@@ -1322,7 +1326,9 @@ static int move_data_block(struct inode *inode, block_t bidx,
 	folio = f2fs_grab_cache_folio(mapping, bidx, false);
 	if (IS_ERR(folio))
 		return PTR_ERR(folio);
-
+	// #ifdef CONFIG_FS_IOMAP_DEBUG_PRINT
+	// FUNC(print_folio,folio);
+	// #endif
 	if (!check_valid_map(F2FS_I_SB(inode), segno, off)) {
 		err = -ENOENT;
 		goto out;
@@ -1476,30 +1482,34 @@ static int move_data_page(struct inode *inode, block_t bidx, int gc_type,
 			goto out;
 		}
 		folio_set_f2fs_gcing(folio);
-#ifdef CONFIG_F2FS_IOMAP_FOLIO_STATE
-		if (!folio_test_large(folio)) {
+		#ifdef CONFIG_F2FS_IOMAP_FOLIO_STATE
+		if(!folio_test_large(folio))
+		{
 			folio_mark_dirty(folio);
-		} else {
-			f2fs_iomap_set_range_dirty(folio, (bidx - folio->index) << PAGE_SHIFT,
-				PAGE_SIZE);
 		}
-#else
+		else
+		{
+			f2fs_iomap_set_range_dirty(folio,(bidx-folio->index)<<PAGE_SHIFT,PAGE_SIZE);
+		}
+		#else
 		folio_mark_dirty(folio);
-#endif
+		#endif
 	} else {
-		struct f2fs_io_info fio = { .sbi = F2FS_I_SB(inode),
-					    .ino = inode->i_ino,
-					    .type = DATA,
-					    .temp = COLD,
-					    .op = REQ_OP_WRITE,
-					    .op_flags = REQ_SYNC,
-					    .old_blkaddr = NULL_ADDR,
-					    .folio = folio,
-					    .encrypted_page = NULL,
-					    .need_lock = LOCK_REQ,
-					    .io_type = FS_GC_DATA_IO,
-					    .idx = bidx - folio->index,
-					    .cnt = 1 };
+		struct f2fs_io_info fio = {
+			.sbi = F2FS_I_SB(inode),
+			.ino = inode->i_ino,
+			.type = DATA,
+			.temp = COLD,
+			.op = REQ_OP_WRITE,
+			.op_flags = REQ_SYNC,
+			.old_blkaddr = NULL_ADDR,
+			.folio = folio,
+			.encrypted_page = NULL,
+			.need_lock = LOCK_REQ,
+			.io_type = FS_GC_DATA_IO,
+			.idx = bidx-folio->index,
+			.cnt = 1
+		};
 		bool is_dirty = folio_test_dirty(folio);
 
 retry:
@@ -1528,7 +1538,6 @@ out:
 	f2fs_folio_put(folio, true);
 	return err;
 }
-
 /*
  * This function tries to get parent node of victim data block, and identifies
  * data block validity. If the block is valid, copy that with cold status and

@@ -23,6 +23,7 @@
 #include "node.h"
 #include "gc.h"
 #include "iostat.h"
+#include "f2fs_ifs.h"
 #include <trace/events/f2fs.h>
 
 #define __reverse_ffz(x) __reverse_ffs(~(x))
@@ -2598,7 +2599,9 @@ static void update_sit_entry(struct f2fs_sb_info *sbi, block_t blkaddr, int del)
 	if (__is_large_section(sbi))
 		get_sec_entry(sbi, segno)->valid_blocks += del;
 }
-
+#ifdef CONFIG_F2FS_DEBUG_PRINT
+__attribute__((optimize("O0")))
+#endif
 void f2fs_invalidate_blocks(struct f2fs_sb_info *sbi, block_t addr,
 				unsigned int len)
 {
@@ -3652,7 +3655,6 @@ static int __get_segment_type_6(struct f2fs_io_info *fio)
 
 		if (is_inode_flag_set(inode, FI_ALIGNED_WRITE))
 			return CURSEG_COLD_DATA_PINNED;
-
 		if (folio_test_f2fs_gcing(fio->folio)) {
 			if (fio->sbi->am.atgc_enabled &&
 				(fio->io_type == FS_DATA_IO) &&
@@ -3931,6 +3933,7 @@ static int log_type_to_seg_type(enum log_type type)
 
 static void do_write_page(struct f2fs_summary *sum, struct f2fs_io_info *fio)
 {
+
 	struct folio *folio = fio->folio;
 	enum log_type type = __get_segment_type(fio);
 	int seg_type = log_type_to_seg_type(type);
@@ -3945,8 +3948,6 @@ static void do_write_page(struct f2fs_summary *sum, struct f2fs_io_info *fio)
 			&fio->new_blkaddr, sum, type, fio);
 	if (unlikely(err)) {
 		f2fs_err_ratelimited(fio->sbi,
-			"%s Failed to allocate data block, ino:%u, index:%lu, type:%d, old_blkaddr:0x%x, new_blkaddr:0x%x, err:%d",
-			__func__, fio->ino, folio->index, type,
 			fio->old_blkaddr, fio->new_blkaddr, err);
 		if (fscrypt_inode_uses_fs_layer_crypto(folio->mapping->host))
 			fscrypt_finalize_bounce_page(&fio->encrypted_page);
@@ -3963,10 +3964,8 @@ static void do_write_page(struct f2fs_summary *sum, struct f2fs_io_info *fio)
 
 	if (GET_SEGNO(fio->sbi, fio->old_blkaddr) != NULL_SEGNO)
 		f2fs_invalidate_internal_cache(fio->sbi, fio->old_blkaddr, 1);
-
 	/* writeout dirty page into bdev */
 	f2fs_submit_page_write(fio);
-
 	f2fs_update_device_state(fio->sbi, fio->ino, fio->new_blkaddr, 1);
 out:
 	if (keep_order)

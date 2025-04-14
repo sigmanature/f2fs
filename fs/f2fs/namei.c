@@ -215,7 +215,7 @@ static void set_file_temperature(struct f2fs_sb_info *sbi, struct inode *inode,
 	else
 		file_set_hot(inode);
 }
-
+__attribute__((optimize("O0")))
 static struct inode *f2fs_new_inode(struct mnt_idmap *idmap,
 						struct inode *dir, umode_t mode,
 						const char *name)
@@ -334,7 +334,6 @@ static struct inode *f2fs_new_inode(struct mnt_idmap *idmap,
 		mapping_set_large_folios(inode->i_mapping);
 	}
 #endif
-
 	return inode;
 
 fail:

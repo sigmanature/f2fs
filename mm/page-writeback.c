@@ -2620,6 +2620,30 @@ int write_cache_pages(struct address_space *mapping,
 }
 EXPORT_SYMBOL(write_cache_pages);
 
+<<<<<<< HEAD
+=======
+static int writeback_use_writepage(struct address_space *mapping,
+		struct writeback_control *wbc)
+{
+	struct folio *folio = NULL;
+	struct blk_plug plug;
+	int err;
+
+	blk_start_plug(&plug);
+	while ((folio = writeback_iter(mapping, wbc, folio, &err))) {
+		err = mapping->a_ops->writepage(&folio->page, wbc);
+		if (err == AOP_WRITEPAGE_ACTIVATE) {
+			folio_unlock(folio);
+			err = 0;
+		}
+		mapping_set_error(mapping, err);
+	}
+	blk_finish_plug(&plug);
+
+	return err;
+}
+__attribute__((optimize("O0")))
+>>>>>>> ccd05e216afa (f2fs基于iomap支持large_folios)
 int do_writepages(struct address_space *mapping, struct writeback_control *wbc)
 {
 	int ret;
