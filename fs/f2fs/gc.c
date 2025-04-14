@@ -21,8 +21,14 @@
 #include "segment.h"
 #include "gc.h"
 #include "iostat.h"
+#include "f2fs_ifs.h"
 #include <trace/events/f2fs.h>
-
+#ifdef CONFIG_F2FS_DEBUG_PRINT
+#include "f2fs_dbg.h"
+#endif
+#ifdef CONFIG_FS_IOMAP_DEBUG_PRINT
+#include "../fs_dbg.h"
+#endif
 static struct kmem_cache *victim_entry_slab;
 
 static unsigned int count_bits(const unsigned long *addr,
@@ -1453,8 +1459,10 @@ static int move_data_page(struct inode *inode, block_t bidx, int gc_type,
 {
 	struct folio *folio;
 	int err = 0;
-
 	folio = f2fs_get_lock_data_folio(inode, bidx, true);
+	#ifdef CONFIG_FS_IOMAP_DEBUG_PRINT
+	FUNC(print_folio,folio);
+	#endif
 	if (IS_ERR(folio))
 		return PTR_ERR(folio);
 
@@ -1472,8 +1480,18 @@ static int move_data_page(struct inode *inode, block_t bidx, int gc_type,
 			err = -EAGAIN;
 			goto out;
 		}
-		folio_mark_dirty(folio);
-		set_page_private_gcing(&folio->page);
+		f2fs_set_folio_private_gcing(folio);
+		// #ifdef CONFIG_F2FS_DEBUG_PRINT
+		// FUNC(print_folio_private,folio);
+		// #endif
+		if(folio_order(folio)==0)
+		{
+			folio_mark_dirty(folio);
+		}
+		else
+		{
+			iomap_set_range_dirty(folio,bidx<<PAGE_SHIFT,PAGE_SIZE);
+		}
 	} else {
 		struct f2fs_io_info fio = {
 			.sbi = F2FS_I_SB(inode),
@@ -1499,11 +1517,11 @@ retry:
 			f2fs_remove_dirty_inode(inode);
 		}
 
-		set_page_private_gcing(&folio->page);
+		f2fs_set_folio_private_gcing(folio);
 
 		err = f2fs_do_write_data_page(&fio);
 		if (err) {
-			clear_page_private_gcing(&folio->page);
+			f2fs_clear_folio_private_gcing(folio);
 			if (err == -ENOMEM) {
 				memalloc_retry_wait(GFP_NOFS);
 				goto retry;

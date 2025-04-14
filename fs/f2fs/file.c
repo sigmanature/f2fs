@@ -32,6 +32,7 @@
 #include "acl.h"
 #include "gc.h"
 #include "iostat.h"
+#include "f2fs_ifs.h"
 #include <trace/events/f2fs.h>
 #include <uapi/linux/f2fs.h>
 
@@ -277,6 +278,12 @@ static int f2fs_do_sync_file(struct file *file, loff_t start, loff_t end,
 	if (datasync || get_dirty_pages(inode) <= SM_I(sbi)->min_fsync_blocks)
 		set_inode_flag(inode, FI_NEED_IPU);
 	ret = file_write_and_wait_range(file, start, end);
+	#ifdef CONFIG_F2FS_DEBUG_PRINT
+	if (ret) {
+		f2fs_err(sbi, "f2fs_sync_file: file_write_and_wait_range failed with %d", ret);
+		return ret;
+	}
+	#endif
 	clear_inode_flag(inode, FI_NEED_IPU);
 
 	if (ret || is_sbi_flag_set(sbi, SBI_CP_DISABLED)) {
@@ -2185,7 +2192,7 @@ static int f2fs_ioc_getversion(struct file *filp, unsigned long arg)
 
 	return put_user(inode->i_generation, (int __user *)arg);
 }
-
+//__attribute__((optimize("O0")))
 static int f2fs_ioc_start_atomic_write(struct file *filp, bool truncate)
 {
 	struct inode *inode = file_inode(filp);
@@ -4899,6 +4906,10 @@ static int f2fs_preallocate_blocks(struct kiocb *iocb, struct iov_iter *iter,
 		ret = f2fs_convert_inline_inode(inode);
 		if (ret)
 			return ret;
+		/*buffered write can convert inline file to large normal file
+		when convert success, we uses mapping set large folios here*/
+		if(f2fs_should_use_buffered_iomap(inode))
+			mapping_set_large_folios(inode->i_mapping);
 	}
 
 	/* Do not preallocate blocks that will be written partially in 4KB. */
@@ -4929,8 +4940,23 @@ static int f2fs_preallocate_blocks(struct kiocb *iocb, struct iov_iter *iter,
 	return map.m_len;
 }
 
-static ssize_t f2fs_buffered_write_iter(struct kiocb *iocb,
-					struct iov_iter *from)
+static ssize_t f2fs_iomap_buffered_write(struct kiocb *iocb, struct iov_iter *i)
+{
+	struct file *file = iocb->ki_filp;
+	struct inode *inode = file_inode(file);
+	ssize_t ret;
+	if (f2fs_is_atomic_file(inode)) {
+		ret = iomap_file_buffered_write(
+			iocb, i, &f2fs_buffered_write_atomic_iomap_ops, NULL);
+	} else {
+		ret = iomap_file_buffered_write(
+			iocb, i, &f2fs_buffered_write_iomap_ops, NULL);
+	}
+	return ret;
+}
+//__attribute__((optimize("O0"))) 
+static ssize_t
+f2fs_buffered_write_iter(struct kiocb *iocb, struct iov_iter *from)
 {
 	struct file *file = iocb->ki_filp;
 	struct inode *inode = file_inode(file);
@@ -4938,16 +4964,20 @@ static ssize_t f2fs_buffered_write_iter(struct kiocb *iocb,
 
 	if (iocb->ki_flags & IOCB_NOWAIT)
 		return -EOPNOTSUPP;
-
-	ret = generic_perform_write(iocb, from);
-
+	if(f2fs_should_use_buffered_iomap(inode))
+	{
+		ret = f2fs_iomap_buffered_write(iocb, from);
+	}
+	else
+	{
+		ret = generic_perform_write(iocb, from);
+	}
 	if (ret > 0) {
-		f2fs_update_iostat(F2FS_I_SB(inode), inode,
-						APP_BUFFERED_IO, ret);
+		f2fs_update_iostat(F2FS_I_SB(inode), inode, APP_BUFFERED_IO,
+				   ret);
 	}
 	return ret;
 }
-
 static int f2fs_dio_write_end_io(struct kiocb *iocb, ssize_t size, int error,
 				 unsigned int flags)
 {
@@ -5102,8 +5132,9 @@ out:
 	trace_f2fs_direct_IO_exit(inode, pos, count, WRITE, ret);
 	return ret;
 }
-
-static ssize_t f2fs_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
+//__attribute__((optimize("O0"))) 
+static ssize_t
+f2fs_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 {
 	struct inode *inode = file_inode(iocb->ki_filp);
 	const loff_t orig_pos = iocb->ki_pos;

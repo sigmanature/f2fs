@@ -23,6 +23,7 @@
 #include "node.h"
 #include "gc.h"
 #include "iostat.h"
+#include "f2fs_ifs.h"
 #include <trace/events/f2fs.h>
 
 #define __reverse_ffz(x) __reverse_ffs(~(x))
@@ -3629,8 +3630,7 @@ static int __get_segment_type_6(struct f2fs_io_info *fio)
 
 		if (is_inode_flag_set(inode, FI_ALIGNED_WRITE))
 			return CURSEG_COLD_DATA_PINNED;
-
-		if (page_private_gcing(fio->page)) {
+		if (f2fs_folio_private_gcing(page_folio(fio->page))) {
 			if (fio->sbi->am.atgc_enabled &&
 				(fio->io_type == FS_DATA_IO) &&
 				(fio->sbi->gc_mode != GC_URGENT_HIGH) &&
@@ -3910,11 +3910,27 @@ static int log_type_to_seg_type(enum log_type type)
 static void do_write_page(struct f2fs_summary *sum, struct f2fs_io_info *fio)
 {
 	struct folio *folio = page_folio(fio->page);
+	/* LFS mode write path */
 	enum log_type type = __get_segment_type(fio);
 	int seg_type = log_type_to_seg_type(type);
 	bool keep_order = (f2fs_lfs_mode(fio->sbi) &&
 				seg_type == CURSEG_COLD_DATA);
-
+	// #ifdef CONFIG_F2FS_DEBUG_PRINT
+	// struct inode*inode=folio->mapping->host;
+	// f2fs_err(F2FS_I_SB(inode),"folio index%d folio_page_idx:%d fio temp:%d ",folio->index,folio_page_idx(folio,fio->page),fio->temp);
+	// switch(fio->temp)
+	// {
+	// case HOT:
+	// 	f2fs_err(F2FS_I_SB(inode),"fio temp: HOT");
+	// 	break;
+	// case WARM:
+	// 	f2fs_err(F2FS_I_SB(inode),"fio temp: WARM");
+	// 	break;
+	// case COLD:
+	// 	f2fs_err(F2FS_I_SB(inode),"fio temp: COLD");
+	// 	break;
+	// }
+	// #endif
 	if (keep_order)
 		f2fs_down_read(&fio->sbi->io_order_lock);
 
@@ -3929,10 +3945,11 @@ static void do_write_page(struct f2fs_summary *sum, struct f2fs_io_info *fio)
 	}
 	if (GET_SEGNO(fio->sbi, fio->old_blkaddr) != NULL_SEGNO)
 		f2fs_invalidate_internal_cache(fio->sbi, fio->old_blkaddr, 1);
-
+	#ifdef CONFIG_F2FS_DEBUG_PRINT
+		f2fs_err(F2FS_I_SB(folio->mapping->host),"%sfolio index %lu, new_blkaddr %llu,host ino %lu,folio_page_idx %lu\n goes to outplace write", __func__,folio->index,fio->new_blkaddr,folio->mapping->host->i_ino,folio_page_idx(folio,fio->page));
+	#endif
 	/* writeout dirty page into bdev */
 	f2fs_submit_page_write(fio);
-
 	f2fs_update_device_state(fio->sbi, fio->ino, fio->new_blkaddr, 1);
 out:
 	if (keep_order)
@@ -3980,7 +3997,7 @@ void f2fs_outplace_write_data(struct dnode_of_data *dn,
 {
 	struct f2fs_sb_info *sbi = fio->sbi;
 	struct f2fs_summary sum;
-
+	
 	f2fs_bug_on(sbi, dn->data_blkaddr == NULL_ADDR);
 	if (fio->io_type == FS_DATA_IO || fio->io_type == FS_CP_DATA_IO)
 		f2fs_update_age_extent_cache(dn);

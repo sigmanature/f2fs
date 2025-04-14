@@ -1,0 +1,11 @@
+#
+# No change to .config
+#
+  SYNC    include/config/auto.conf.cmd
+make[4]: *** [scripts/kconfig/Makefile:85: syncconfig] 中断
+make[2]: *** [include/config/auto.conf.cmd] 正在删除文件“include/generated/rustc_cfg”
+make[3]: *** [Makefile:731: syncconfig] 中断
+make[2]: *** [include/config/auto.conf.cmd] 正在删除文件“include/generated/autoconf.h”
+make[2]: *** [Makefile:832: include/config/auto.conf.cmd] 中断
+make[1]: *** [/root/learn/learn_os/f2fs_dev/Makefile:369: __build_one_by_one] 中断
+make: *** [Makefile:248: __sub-make] 中断
