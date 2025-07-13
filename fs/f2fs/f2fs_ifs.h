@@ -51,7 +51,7 @@ f2fs_ifs_private_flags_ptr(struct f2fs_iomap_folio_state *fifs, struct folio *fo
 	return &fifs->state[f2fs_ifs_iomap_longs(folio)];
 }
 static inline atomic_t *
-f2fs_ifs_cc_pending_bytes_ptr(struct f2fs_iomap_folio_state *fifs, struct folio *folio)
+f2fs_ifs_dirty_bytes_pending_ptr(struct f2fs_iomap_folio_state *fifs, struct folio *folio)
 {
 	// Treat the second private long as an atomic_t
 	return (atomic_t *)&fifs->state[f2fs_ifs_iomap_longs(folio) + 1];
@@ -78,13 +78,15 @@ inline void f2fs_clear_folio_private_all(struct folio *folio);
 /*0-order and fully dirty folio has no fifs
 they store private flag directly in their folio->private field
 as original f2fs page private behaviour*/
-unsigned f2fs_iomap_find_dirty_range(struct folio *folio, u64 *range_start,u64 range_end);							
+unsigned f2fs_iomap_find_dirty_range(struct folio *folio, u64 *range_start,u64 range_end);
+void f2fs_ifs_clear_range_uptodate(struct folio *folio, struct f2fs_iomap_folio_state*fifs,size_t off, size_t len);
+void f2fs_iomap_finish_folio_read(struct folio *folio, size_t off,size_t len, int error);
 static inline bool is_f2fs_ifs(struct folio *folio)
 {
     if (!folio_test_private(folio))
         return false;
         
-    // 检查是否为标志位使用
+    // first directly test no pointer flag is set or not
     if (test_bit(PAGE_PRIVATE_NOT_POINTER, (unsigned long *)&folio->private))
         return false;
         

@@ -3915,22 +3915,6 @@ static void do_write_page(struct f2fs_summary *sum, struct f2fs_io_info *fio)
 	int seg_type = log_type_to_seg_type(type);
 	bool keep_order = (f2fs_lfs_mode(fio->sbi) &&
 				seg_type == CURSEG_COLD_DATA);
-	// #ifdef CONFIG_F2FS_DEBUG_PRINT
-	// struct inode*inode=folio->mapping->host;
-	// f2fs_err(F2FS_I_SB(inode),"folio index%d folio_page_idx:%d fio temp:%d ",folio->index,folio_page_idx(folio,fio->page),fio->temp);
-	// switch(fio->temp)
-	// {
-	// case HOT:
-	// 	f2fs_err(F2FS_I_SB(inode),"fio temp: HOT");
-	// 	break;
-	// case WARM:
-	// 	f2fs_err(F2FS_I_SB(inode),"fio temp: WARM");
-	// 	break;
-	// case COLD:
-	// 	f2fs_err(F2FS_I_SB(inode),"fio temp: COLD");
-	// 	break;
-	// }
-	// #endif
 	if (keep_order)
 		f2fs_down_read(&fio->sbi->io_order_lock);
 
@@ -3946,7 +3930,10 @@ static void do_write_page(struct f2fs_summary *sum, struct f2fs_io_info *fio)
 	if (GET_SEGNO(fio->sbi, fio->old_blkaddr) != NULL_SEGNO)
 		f2fs_invalidate_internal_cache(fio->sbi, fio->old_blkaddr, 1);
 	#ifdef CONFIG_F2FS_DEBUG_PRINT
-		f2fs_err(F2FS_I_SB(folio->mapping->host),"%sfolio index %lu, new_blkaddr %llu,host ino %lu,folio_page_idx %lu\n goes to outplace write", __func__,folio->index,fio->new_blkaddr,folio->mapping->host->i_ino,folio_page_idx(folio,fio->page));
+	if(fio->compressed_page)
+	{
+		f2fs_err(F2FS_I_SB(folio->mapping->host),"%scfolio index %lu, old blk:%lu new_blk %llu outplace write", __func__,folio->index,fio->old_blkaddr,fio->new_blkaddr);
+	}
 	#endif
 	/* writeout dirty page into bdev */
 	f2fs_submit_page_write(fio);

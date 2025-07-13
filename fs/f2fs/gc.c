@@ -1460,9 +1460,9 @@ static int move_data_page(struct inode *inode, block_t bidx, int gc_type,
 	struct folio *folio;
 	int err = 0;
 	folio = f2fs_get_lock_data_folio(inode, bidx, true);
-	#ifdef CONFIG_FS_IOMAP_DEBUG_PRINT
-	FUNC(print_folio,folio);
-	#endif
+	// #ifdef CONFIG_FS_IOMAP_DEBUG_PRINT
+	// FUNC(print_folio,folio);
+	// #endif
 	if (IS_ERR(folio))
 		return PTR_ERR(folio);
 
@@ -1534,7 +1534,6 @@ out:
 	f2fs_folio_put(folio, true);
 	return err;
 }
-
 /*
  * This function tries to get parent node of victim data block, and identifies
  * data block validity. If the block is valid, copy that with cold status and

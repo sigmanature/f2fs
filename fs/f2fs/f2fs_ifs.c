@@ -18,7 +18,10 @@ struct f2fs_iomap_folio_state *f2fs_ifs_alloc(struct folio *folio, gfp_t gfp,boo
 			return NULL;
 		}
 		else
-		{
+		{/* GC can store private flag in 0 order folio's folio->private
+			causes iomap buffered write mistakenly interpret as a pointer
+			we add a bool force_alloc to deal with this case
+		*/
 			struct f2fs_iomap_folio_state *fifs;
 			alloc_size = sizeof(*fifs) + 2*sizeof(unsigned long);
 			fifs = kmalloc(alloc_size, gfp); 
@@ -62,7 +65,7 @@ struct f2fs_iomap_folio_state *f2fs_ifs_alloc(struct folio *folio, gfp_t gfp,boo
 			// Copy data from the presumed iomap_folio_state (old_private)
 			ifs_to_f2fs_ifs(old_private, fifs, folio);
 			WRITE_ONCE(fifs->read_bytes_pending, F2FS_IFS_MAGIC);
-            atomic_set(f2fs_ifs_cc_pending_bytes_ptr(fifs, folio), 0);
+            atomic_set(f2fs_ifs_dirty_bytes_pending_ptr(fifs, folio), 0);
 			folio_change_private(folio, fifs);
 			kfree(old_private); 
 			return fifs;
@@ -86,7 +89,7 @@ struct f2fs_iomap_folio_state *f2fs_ifs_alloc(struct folio *folio, gfp_t gfp,boo
 			bitmap_set(fifs->state, nr_blocks, nr_blocks);		
 		WRITE_ONCE(fifs->read_bytes_pending, F2FS_IFS_MAGIC);
         atomic_set(&fifs->write_bytes_pending, 0); 
-        atomic_set(f2fs_ifs_cc_pending_bytes_ptr(fifs, folio), 0);
+        atomic_set(f2fs_ifs_dirty_bytes_pending_ptr(fifs, folio), 0);
 		folio_attach_private(folio, fifs);
 		return fifs;
 	}
@@ -147,6 +150,7 @@ struct f2fs_iomap_folio_state *f2fs_folio_get_private(struct folio *folio)
     
     return NULL;
 }
+__attribute__((optimize("O0")))
 unsigned f2fs_iomap_find_dirty_range(struct folio *folio, u64 *range_start,
 		u64 range_end)
 {
@@ -157,10 +161,23 @@ unsigned f2fs_iomap_find_dirty_range(struct folio *folio, u64 *range_start,
 	if(f2fs_compressed_file(inode))
 	{	
 		/*clamp range end to a cluster's size*/
-        
-		range_end=min(range_end,(cluster_i_end_idx(inode,*range_start>>PAGE_SHIFT)+1) << PAGE_SHIFT);
+		int a=*range_start>>PAGE_SHIFT;
+		int b=cluster_i_idx(inode, a)<<F2FS_I(inode)->i_cluster_size;
+		int c=(F2FS_I(inode)->i_cluster_size - 1);
+		range_end=min(range_end,(i_end_idx_of_cluster(inode,*range_start>>PAGE_SHIFT)+1) << PAGE_SHIFT);
 	}
 	return iomap_find_dirty_range(folio, range_start, range_end);
+}
+void f2fs_ifs_clear_range_uptodate(struct folio *folio, struct f2fs_iomap_folio_state*fifs,size_t off, size_t len)
+{
+	struct inode *inode = folio->mapping->host;
+	unsigned int first_blk = (off >> inode->i_blkbits);
+	unsigned int last_blk = (off + len - 1) >> inode->i_blkbits;
+	unsigned int nr_blks = last_blk - first_blk + 1;
+	unsigned long flags;
+	spin_lock_irqsave(&fifs->state_lock, flags);
+	bitmap_clear(fifs->state, first_blk, nr_blks);
+	spin_unlock_irqrestore(&fifs->state_lock, flags);
 }
 inline unsigned long f2fs_get_folio_private_data(struct folio *folio)
 {

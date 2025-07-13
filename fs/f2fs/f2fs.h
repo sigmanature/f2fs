@@ -4038,10 +4038,16 @@ void f2fs_destroy_post_read_processing(void);
 int f2fs_init_post_read_wq(struct f2fs_sb_info *sbi);
 void f2fs_destroy_post_read_wq(struct f2fs_sb_info *sbi);
 void f2fs_iomap_put_folio(struct inode *inode, loff_t pos, unsigned copied,struct folio *folio);
+struct folio* f2fs_iomap_get_folio(struct iomap_iter *iter, loff_t pos,
+			unsigned len);
 void f2fs_init_readpage_ctx(struct f2fs_readpage_ctx *ctx,struct readahead_control *rac);
 int f2fs_compress_iomap_readahead(struct inode *inode, struct readahead_control *rac);
 int f2fs_do_read_single_folio_iomap(struct iomap_iter *iter,struct f2fs_readpage_ctx *ctx, loff_t pos,loff_t plen, loff_t poff);	
-int f2fs_do_read_multi_folios(struct compress_ctx *cc, struct bio **bio_ret,struct folio *folio, loff_t pos,loff_t plen,struct readahead_control *rac);
+int f2fs_do_read_multi_folios(struct f2fs_readpage_ctx* ctx, loff_t pos,loff_t plen);
+int do_read_multi_folios(struct compress_ctx*cc, struct folio *folio, loff_t pos,
+				  loff_t plen, struct bio** bio_ret,
+				  struct readahead_control *rac,bool for_write);
+void f2fs_iomap_finish_folio_read(struct folio *folio, size_t off,size_t len, int error);
 extern const struct iomap_ops f2fs_iomap_ops;
 extern const struct iomap_folio_ops f2fs_iomap_folio_ops;
 extern const struct iomap_ops f2fs_buffered_read_iomap_ops;
@@ -4061,6 +4067,8 @@ extern unsigned iomap_find_dirty_range(struct folio *folio, u64 *range_start,
 		u64 range_end);
 extern int iomap_iter_advance(struct iomap_iter *iter, u64 *count);
 extern void ifs_set_range_dirty(struct folio *folio,
+		struct iomap_folio_state *ifs, size_t off, size_t len);
+extern bool ifs_set_range_uptodate(struct folio *folio,
 		struct iomap_folio_state *ifs, size_t off, size_t len);
 /*
  * gc.c
@@ -4494,7 +4502,7 @@ bool f2fs_is_compressed_page(struct page *page);
 bool f2fs_is_compressed_folio(struct folio *folio);
 struct folio *f2fs_compress_control_folio(struct folio *folio);
 int f2fs_prepare_compress_overwrite(struct inode *inode,
-			struct page **pagep, pgoff_t index, void **fsdata);
+			struct page **pagep, pgoff_t index, void **fsdata,fgf_t fgp_flags);
 bool f2fs_compress_write_end(struct inode *inode, void *fsdata,
 					pgoff_t index, unsigned copied);
 int f2fs_truncate_partial_cluster(struct inode *inode, u64 from, bool lock);
@@ -4507,6 +4515,8 @@ void f2fs_decompress_cluster(struct decompress_io_ctx *dic, bool in_task);
 void f2fs_end_read_compressed_page(struct page *page, bool failed,
 				block_t blkaddr, bool in_task);
 bool f2fs_cluster_is_empty(struct compress_ctx *cc);
+bool f2fs_cluster_is_full(struct compress_ctx *cc);
+bool f2fs_cluster_is_partial_full(struct compress_ctx *cc);
 bool f2fs_cluster_can_merge_page(struct compress_ctx *cc, pgoff_t index);
 bool f2fs_all_cluster_page_ready(struct compress_ctx *cc, struct page **pages,
 				int index, int nr_pages, bool uptodate);
@@ -4550,11 +4560,13 @@ bool f2fs_load_compressed_folio(struct f2fs_sb_info *sbi, struct folio *folio,
 								block_t blkaddr);
 void f2fs_invalidate_compress_pages(struct f2fs_sb_info *sbi, nid_t ino);
 void f2fs_compress_ctx_add_folio(struct compress_ctx *cc, struct folio *folio,loff_t pos,loff_t rlen);
+int f2fs_wait_cluster_uptodate(struct inode*inode,pgoff_t start_check_idx,unsigned int cluster_size);
+pgoff_t start_idx_of_cluster(struct compress_ctx *cc);
 pgoff_t cluster_idx(struct compress_ctx *cc, pgoff_t index);
-pgoff_t cluster_end_idx(struct compress_ctx *cc, pgoff_t index);
+pgoff_t end_idx_of_cluster(struct compress_ctx *cc, pgoff_t index);
 pgoff_t cluster_i_idx(struct inode*inode,pgoff_t index);
-pgoff_t cluster_i_end_idx(struct inode*inode,pgoff_t index);
-bool f2fs_cluster_is_full(struct compress_ctx *cc);
+pgoff_t i_end_idx_of_cluster(struct inode*inode,pgoff_t index);
+unsigned int offset_i_in_cluster(struct inode*inode,pgoff_t index);
 #define inc_compr_inode_stat(inode)					\
 	do {								\
 		struct f2fs_sb_info *sbi = F2FS_I_SB(inode);		\

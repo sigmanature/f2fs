@@ -53,8 +53,8 @@ inline bool ifs_block_is_uptodate(struct iomap_folio_state *ifs,
 {
 	return test_bit(block, ifs->state);
 }
-
-static bool ifs_set_range_uptodate(struct folio *folio,
+/*My change: remove static*/
+bool ifs_set_range_uptodate(struct folio *folio,
 		struct iomap_folio_state *ifs, size_t off, size_t len)
 {
 	struct inode *inode = folio->mapping->host;
@@ -65,6 +65,7 @@ static bool ifs_set_range_uptodate(struct folio *folio,
 	bitmap_set(ifs->state, first_blk, nr_blks);
 	return ifs_is_fully_uptodate(folio, ifs);
 }
+EXPORT_SYMBOL_GPL(ifs_set_range_uptodate);
 /*My change: remove static*/
 void iomap_set_range_uptodate(struct folio *folio, size_t off,
 		size_t len)

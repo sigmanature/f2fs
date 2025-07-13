@@ -30,9 +30,3 @@ do {                                                             \
         } \
     } while (0)
 #endif
-static void noinline print_folio(struct folio *folio)
-{
-    struct inode *inode = folio->mapping->host;
-    pr_err("folio %p, index %lu, order %d, host inode ino %d",
-             folio, folio_index(folio), folio_order(folio), inode->i_ino);
-}
