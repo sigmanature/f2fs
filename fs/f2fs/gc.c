@@ -1460,9 +1460,9 @@ static int move_data_page(struct inode *inode, block_t bidx, int gc_type,
 	struct folio *folio;
 	int err = 0;
 	folio = f2fs_get_lock_data_folio(inode, bidx, true);
-	// #ifdef CONFIG_FS_IOMAP_DEBUG_PRINT
-	// FUNC(print_folio,folio);
-	// #endif
+	#ifdef CONFIG_FS_IOMAP_DEBUG_PRINT
+	FUNC(print_folio,folio);
+	#endif
 	if (IS_ERR(folio))
 		return PTR_ERR(folio);
 
@@ -1481,9 +1481,6 @@ static int move_data_page(struct inode *inode, block_t bidx, int gc_type,
 			goto out;
 		}
 		f2fs_set_folio_private_gcing(folio);
-		// #ifdef CONFIG_F2FS_DEBUG_PRINT
-		// FUNC(print_folio_private,folio);
-		// #endif
 		if(folio_order(folio)==0)
 		{
 			folio_mark_dirty(folio);
