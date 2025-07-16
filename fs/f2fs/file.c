@@ -254,6 +254,9 @@ static void try_to_fix_pino(struct inode *inode)
 static int f2fs_do_sync_file(struct file *file, loff_t start, loff_t end,
 						int datasync, bool atomic)
 {
+	#ifdef CONFIG_F2FS_DIABLE_WB
+	return 0;
+	#endif
 	struct inode *inode = file->f_mapping->host;
 	struct f2fs_sb_info *sbi = F2FS_I_SB(inode);
 	nid_t ino = inode->i_ino;
