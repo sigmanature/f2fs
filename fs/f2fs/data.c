@@ -1873,7 +1873,7 @@ skip:
 	} while (dn.ofs_in_node < end_offset);
 	// goto next_block;/*循环判断和跳转*/
 	/*后处理逻辑开始*/
-	if (flag == F2FS_GET_BLOCK_PRECACHE) {
+	if (flag == F2FS_GET_BLOCK_PRECACHE|| flag == F2FS_GET_BLOCK_IOMAP) {
 		if (map->m_flags & F2FS_MAP_MAPPED) {
 			unsigned int ofs = start_pgofs - map->m_lblk;
 
@@ -1918,7 +1918,7 @@ sync_out:
 		}
 	}
 
-	if (flag == F2FS_GET_BLOCK_PRECACHE) {
+	if (flag == F2FS_GET_BLOCK_PRECACHE||flag== F2FS_GET_BLOCK_IOMAP) {
 		if (map->m_flags & F2FS_MAP_MAPPED) {
 			unsigned int ofs = start_pgofs - map->m_lblk;
 
@@ -5037,7 +5037,7 @@ f2fs_buffered_read_iomap_begin(struct inode *inode, loff_t offset,
 	if ((map.m_len >= F2FS_MIN_EXTENT_LEN ||
 	     f2fs_lookup_read_extent_cache(inode, map.m_lblk - 1, &ei)) &&
 	    use_extent) {
-		err = f2fs_map_blocks(inode, &map, F2FS_GET_BLOCK_PRECACHE);
+		err = f2fs_map_blocks(inode, &map, F2FS_GET_BLOCK_IOMAP);
 		if (err)
 			return err;
 	} else {
