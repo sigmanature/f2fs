@@ -411,8 +411,7 @@ static void f2fs_write_end_io(struct bio *bio)
 		struct f2fs_iomap_folio_state *fifs = folio->private;
 		if (folio_order(folio)>0&&fifs) {
 			// fi.length is the number of bytes from this folio in this bio segment
-			WARN_ON_ONCE(atomic_read(&fifs->write_bytes_pending) <=
-				     0);
+			f2fs_bug_on(F2FS_F_SB(folio),atomic_read(&fifs->write_bytes_pending) <=0);
 			if (atomic_sub_and_test(fi.length,
 						&fifs->write_bytes_pending)) {
 				folio_end_writeback(folio);
@@ -1091,25 +1090,21 @@ next:
 
 	type = WB_DATA_TYPE(bio_page, fio->compressed_page);
 	inc_page_count(sbi, type);
-	#ifdef CONFIG_F2FS_DEBUG_PRINT	
-		if(io->bio==NULL)
-			f2fs_err(sbi, "%s: io->bio is NULL",__func__);
-		else
-		{
-			f2fs_err(sbi, "%s bio %p before add %s:page",__func__, io->bio,fio->compressed_page?"compressed":"normal");
-			f2fs_list_folios_bio(io->bio);
-		}
-	#endif
+	// #ifdef CONFIG_F2FS_DEBUG_PRINT	
+	// 	if(io->bio==NULL)
+	// 		f2fs_err(sbi, "%s: io->bio is NULL",__func__);
+	// 	else
+	// 	{
+	// 		f2fs_err(sbi, "%s bio %p before add %s:page",__func__, io->bio,fio->compressed_page?"compressed":"normal");
+	// 		f2fs_list_folios_bio(io->bio);
+	// 	}
+	// #endif
 	if (io->bio &&
 	    (!io_is_mergeable(sbi, io->bio, io, fio, io->last_block_in_bio,
 			      fio->new_blkaddr) ||
 	     !f2fs_crypt_mergeable_bio(io->bio, inode,
 				       page_folio(bio_page)->index, fio)))
 		{ 
-			#ifdef CONFIG_F2FS_DEBUG_PRINT	
-				f2fs_err(sbi, "%s bio %p in cannot merge path",__func__, io->bio);
-				f2fs_list_folios_bio(io->bio);
-			#endif
 			__submit_merged_bio(io);
 		}
 alloc_new:
@@ -1121,17 +1116,9 @@ alloc_new:
 	}
 
 	if (bio_add_page(io->bio, bio_page, PAGE_SIZE, 0) < PAGE_SIZE) {
-		#ifdef CONFIG_F2FS_DEBUG_PRINT	
-		f2fs_err(sbi, "%s bio %p in add page fail path",__func__, io->bio);
-		f2fs_list_folios_bio(io->bio);
-		#endif
 		__submit_merged_bio(io);
 		goto alloc_new;
 	}
-	#ifdef CONFIG_F2FS_DEBUG_PRINT	
-		f2fs_err(sbi, "%s bio %p after add %s:page",__func__, io->bio,fio->compressed_page?"compressed":"normal");
-		f2fs_list_folios_bio(io->bio);
-	#endif
 	if (fio->io_wbc)
 		wbc_account_cgroup_owner(fio->io_wbc, page_folio(fio->page),
 					 PAGE_SIZE);
@@ -3038,7 +3025,7 @@ static inline bool need_inplace_update(struct f2fs_io_info *fio)
 int f2fs_do_write_data_page(struct f2fs_io_info *fio)
 {
 	struct folio *folio = page_folio(fio->page);
-	struct inode *inode = folio->mapping->host;
+	struct inode* inode = folio->mapping->host;
 	struct dnode_of_data dn;
 	struct node_info ni;
 	bool ipu_force = false;
@@ -3345,7 +3332,9 @@ redirty_out:
 }
 /*Write one dirty segment for one folio
 all the retry logic is moved to here from f2fs_write_raw_pages and f2fs_write_cache_folios */
+#ifdef CONFIG_F2FS_DEBUG_PRINT
 __attribute__((optimize("O0")))
+#endif
 int f2fs_write_single_data_folio(struct folio *folio, int *submitted_pages_count,
 				struct bio **bio_ptr, sector_t *last_block_ptr,
 				struct writeback_control *wbc,
@@ -3863,6 +3852,9 @@ static int f2fs_write_cache_folios(struct address_space *mapping,
 		if (i_blocks_per_folio(inode, folio) > 1) {
 			if (!fifs) {
 				fifs = f2fs_ifs_alloc(folio, 0,true);
+				#ifdef CONFIG_F2FS_DEBUG_PRINT
+				f2fs_bug_on(F2FS_P_SB(folio),f2fs_folio_private_deferred_unlock(folio));
+				#endif
 				iomap_set_range_dirty(folio, 0, end_pos - pos);
 			}
 		}
@@ -3909,10 +3901,10 @@ static int f2fs_write_cache_folios(struct address_space *mapping,
 				if (folio_order(folio)>0&&fifs) {
 					atomic_add(r_len, f2fs_ifs_dirty_bytes_pending_ptr(fifs, folio));
 				}
-				#ifdef CONFIG_F2FS_DEBUG_PRINT
-				f2fs_err(F2FS_I_SB(inode),"write_cache_folios:after cc add folio:");
-				FUNC(f2fs_list_folios_cc, &cc);
-				#endif
+				// #ifdef CONFIG_F2FS_DEBUG_PRINT
+				// f2fs_err(F2FS_I_SB(inode),"write_cache_folios:after cc add folio:");
+				// FUNC(f2fs_list_folios_cc, &cc);
+				// #endif
 			} else { 
 				err = f2fs_write_single_data_folio(folio, &submitted, NULL,
 					NULL, wbc, io_type, 0 ,false,false ,pos,pos +r_len);
@@ -3929,22 +3921,25 @@ static int f2fs_write_cache_folios(struct address_space *mapping,
 		iomap_clear_range_dirty(folio, 0, folio_size(folio));
 
 handle_current_folio_error: 
-		if(f2fs_compressed_file(inode))
+		
+		if(!err&&fifs&&folio_order(folio)>0&&atomic_read(f2fs_ifs_dirty_bytes_pending_ptr(fifs, folio)) > 0)
 		{
-			if(!err&&fifs&&folio_order(folio)>0&&atomic_read(f2fs_ifs_dirty_bytes_pending_ptr(fifs, folio)) > 0)
-			{
 			// Parts of this folio are staged in compress_ctx. Defer unlock.
 			f2fs_set_folio_private_deferred_unlock(folio);
-			#ifdef CONFIG_F2FS_DEBUG_PRINT
-			f2fs_err(F2FS_I_SB(inode),"folio index%d order %d defer unlock",
-				folio->index, folio_order(folio));
-			#endif
-			} 
-		}
-		else if(folio_order(folio)>0){
-			//for normal file, we always unlock large folio after find dirty range end
-			// order 0 folio now unlock by f2fs_write_single_data_page
+			// #ifdef CONFIG_F2FS_DEBUG_PRINT
+			// f2fs_err(F2FS_I_SB(inode),"folio index%d order %d defer unlock",
+			// 	folio->index, folio_order(folio));
+			// #endif
+		} 
+		else if(folio_test_locked(folio)){
+			// not staged,if the folio didn't be locked, unlock it.
 			folio_unlock(folio);
+		}
+		if(!submitted)
+		{
+			// none of the folio's part go to writeback,we manually end_writeback after unlock it
+			if(folio_test_writeback(folio))
+				folio_end_writeback(folio);
 		}
 		if(err)
 		{ 
@@ -5384,7 +5379,7 @@ static int f2fs_buffered_write_iomap_begin(struct inode *inode, loff_t pos, loff
 			.cluster_size = F2FS_I(inode)->i_cluster_size,
 			.cluster_idx = cluster_i_idx(inode,index),
 		};
-	if (pos<i_size_read(inode)&&f2fs_compressed_file(inode)) {
+	if (pos<i_size_read(inode)&&f2fs_compressed_file(inode)&&f2fs_is_compressed_cluster(inode,index)) {
 		length=min_t(loff_t,length,i_size_read(inode)-pos);
 		struct iomap_iter* iter=container_of(iomap,struct iomap_iter,iomap);
 		struct bio*bio=NULL;
@@ -5395,9 +5390,17 @@ static int f2fs_buffered_write_iomap_begin(struct inode *inode, loff_t pos, loff
 		pgoff_t end_idx = ((pos+length)>>PAGE_SHIFT)-1;
 		end_idx = end_idx_of_cluster(&cc,end_idx);//Aligned end idx to the last cluster's end
 		loff_t aligned_len=(end_idx-start_idx+1)<<PAGE_SHIFT;
+		#ifdef CONFIG_F2FS_DEBUG_PRINT
+		ssleep(1);
+		f2fs_err(F2FS_I_SB(inode),"current state:pos%d,end_idx%d",pos,end_idx);
+		FUNC(f2fs_check_inode_folios_writeback, inode);
+		#endif // DEBUG
 		struct folio*folio=iomap_get_folio(iter,start_idx<<PAGE_SHIFT,aligned_len);
 		if (folio_test_uptodate(folio))
+		{
+			iomap->length+=min_t(unsigned int,folio_nr_pages(folio)<<PAGE_SHIFT,length);
 			goto setup_iomap;
+		}
 		struct f2fs_iomap_folio_state* fifs=f2fs_ifs_alloc(folio, iter->flags,false);
 		if(folio_order(folio)>0&&fifs)
 		{

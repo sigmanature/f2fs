@@ -47,6 +47,8 @@ static void f2fs_check_inode_folios_writeback(struct inode *inode)
                     "Error:inode(%lu): folio %p, index %lu, order %u is locked",
                     inode->i_ino, folio, folio_index(folio), 
                     folio_order(folio));
+                ssleep(1);
+                f2fs_bug_on(sbi, 1);
             }
             else
             {
@@ -284,5 +286,12 @@ static void f2fs_ifs_print_uptodate_status(struct folio *folio)
     spin_unlock_irqrestore(&fifs->state_lock, flags);
 }
 
-
+static void f2fs_print_dn_blkaddr(struct dnode_of_data* dn,pgoff_t index)
+{
+    f2fs_err(F2FS_I_SB(dn->inode),"in f2fs_print_dn_blkaddr\n");
+    dump_stack();
+    f2fs_err(F2FS_I_SB(dn->inode),"node_base addr is %p:",get_dnode_addr(dn->inode, dn->node_folio));
+    f2fs_err(F2FS_I_SB(dn->inode),"data_blkaddr is %d:",le32_to_cpu(*(get_dnode_addr(dn->inode, dn->node_folio) + dn->ofs_in_node)));
+    f2fs_err(F2FS_I_SB(dn->inode), "index:%d ofs_in_node:%d blk_addr: %lx",index,dn->ofs_in_node,dn->data_blkaddr);
+}
 #endif /*F2FS_DBG_H*/

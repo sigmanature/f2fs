@@ -625,7 +625,9 @@ static int f2fs_file_open(struct inode *inode, struct file *filp)
 
 	return finish_preallocate_blocks(inode);
 }
-
+#ifdef CONFIG_F2FS_DEBUG_PRINT
+__attribute__((optimize("O0")))
+#endif
 void f2fs_truncate_data_blocks_range(struct dnode_of_data *dn, int count)
 {
 	struct f2fs_sb_info *sbi = F2FS_I_SB(dn->inode);
@@ -750,7 +752,9 @@ truncate_out:
 	f2fs_folio_put(folio, true);
 	return 0;
 }
-
+#ifdef CONFIG_F2FS_DEBUG_PRINT
+__attribute__((optimize("O0")))
+#endif
 int f2fs_do_truncate_blocks(struct inode *inode, u64 from, bool lock)
 {
 	struct f2fs_sb_info *sbi = F2FS_I_SB(inode);

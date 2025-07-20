@@ -2580,7 +2580,9 @@ static void update_sit_entry(struct f2fs_sb_info *sbi, block_t blkaddr, int del)
 	if (__is_large_section(sbi))
 		get_sec_entry(sbi, segno)->valid_blocks += del;
 }
-
+#ifdef CONFIG_F2FS_DEBUG_PRINT
+__attribute__((optimize("O0")))
+#endif
 void f2fs_invalidate_blocks(struct f2fs_sb_info *sbi, block_t addr,
 				unsigned int len)
 {
@@ -3929,12 +3931,6 @@ static void do_write_page(struct f2fs_summary *sum, struct f2fs_io_info *fio)
 	}
 	if (GET_SEGNO(fio->sbi, fio->old_blkaddr) != NULL_SEGNO)
 		f2fs_invalidate_internal_cache(fio->sbi, fio->old_blkaddr, 1);
-	#ifdef CONFIG_F2FS_DEBUG_PRINT
-	if(fio->compressed_page)
-	{
-		f2fs_err(F2FS_I_SB(folio->mapping->host),"%scfolio index %lu, old blk:%lu new_blk %llu outplace write", __func__,folio->index,fio->old_blkaddr,fio->new_blkaddr);
-	}
-	#endif
 	/* writeout dirty page into bdev */
 	f2fs_submit_page_write(fio);
 	f2fs_update_device_state(fio->sbi, fio->ino, fio->new_blkaddr, 1);
