@@ -414,6 +414,9 @@ static void f2fs_write_end_io(struct bio *bio)
 			f2fs_bug_on(F2FS_F_SB(folio),atomic_read(&fifs->write_bytes_pending) <=0);
 			if (atomic_sub_and_test(fi.length,
 						&fifs->write_bytes_pending)) {
+				#ifdef CONFIG_F2FS_DEBUG_PRINT
+				FUNC(print_wbp,folio);
+				#endif
 				folio_end_writeback(folio);
 			}
 		} else {
@@ -798,7 +801,7 @@ int f2fs_submit_page_bio(struct f2fs_io_info *fio)
 
 	f2fs_set_bio_crypt_ctx(bio, fio_folio->mapping->host,
 			fio_folio->index, fio, GFP_NOIO);
-	bio_add_folio_nofail(bio, data_folio, folio_size(data_folio), 0);
+	bio_add_folio_nofail(bio, data_folio, PAGE_SIZE, folio_page_idx(data_folio,fio->page)<<PAGE_SHIFT);
 
 	if (fio->io_wbc && !is_read_io(fio->op))
 		wbc_account_cgroup_owner(fio->io_wbc, fio_folio, PAGE_SIZE);
