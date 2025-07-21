@@ -1492,6 +1492,23 @@ static int folio_put_wait_locked(struct folio *folio, int state)
  */
 void folio_unlock(struct folio *folio)
 {
+	struct address_space *mapping;
+    struct inode          *inode;
+	if (unlikely(folio_test_swapcache(folio)))
+        mapping = NULL;
+    else
+        mapping = folio_mapping(folio);
+	if (!mapping)
+                goto out;
+
+        /* ③ host 一定是有效 struct inode*，再看 i_ino */
+        inode = READ_ONCE(mapping->host);
+        if (inode && inode->i_ino == 263|| inode->i_ino == 267) {
+                pr_info("folio_unlock: ino=%lu idx=%lu\n",
+                        inode->i_ino, folio->index);
+                dump_stack();
+        }
+	out:
 	/* Bit 7 allows x86 to check the byte's sign bit */
 	BUILD_BUG_ON(PG_waiters != 7);
 	BUILD_BUG_ON(PG_locked > 7);

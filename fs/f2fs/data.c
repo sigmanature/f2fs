@@ -171,6 +171,16 @@ static void f2fs_finish_read_bio(struct bio *bio, bool in_task)
 }
 void f2fs_iomap_finish_folio_read(struct folio *folio, size_t off,size_t len, int error)
 {
+	#ifdef CONFIG_F2FS_DEBUG_PRINT
+	if(folio_test_locked(folio))
+	{
+		f2fs_err(F2FS_F_SB(folio),"%s yes folio index %d order %d host ino %d is locked",__func__,folio->index,folio_order(folio),folio_inode(folio)->i_ino);
+	}
+	else
+	{
+		f2fs_err(F2FS_F_SB(folio),"%s no!!! folio index %d order %d host ino %d is not locked",__func__,folio->index,folio_order(folio),folio_inode(folio)->i_ino);
+	}
+	#endif
 	struct f2fs_iomap_folio_state *fifs =folio->private;
 		bool uptodate = !error;
 		bool finished = true;
@@ -1323,6 +1333,13 @@ struct folio *f2fs_get_read_data_folio(struct inode *inode, pgoff_t index,
 	int err;
 
 	folio = f2fs_grab_cache_folio(mapping, index, for_write);
+	#ifdef CONFIG_F2FS_DEBUG_PRINT
+	FUNC(print_folio, folio);
+	if(folio_test_locked(folio))
+	{
+		f2fs_err(F2FS_F_SB(folio),"folio index %d,order %d,host ino%d locked:",folio->index,folio_order(folio),folio->mapping->host->i_ino);
+	}
+	#endif
 	if (IS_ERR(folio))
 		return folio;
 
