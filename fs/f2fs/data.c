@@ -171,16 +171,16 @@ static void f2fs_finish_read_bio(struct bio *bio, bool in_task)
 }
 void f2fs_iomap_finish_folio_read(struct folio *folio, size_t off,size_t len, int error)
 {
-	#ifdef CONFIG_F2FS_DEBUG_PRINT
-	if(folio_test_locked(folio))
-	{
-		f2fs_err(F2FS_F_SB(folio),"%s yes folio index %d order %d host ino %d is locked",__func__,folio->index,folio_order(folio),folio_inode(folio)->i_ino);
-	}
-	else
-	{
-		f2fs_err(F2FS_F_SB(folio),"%s no!!! folio index %d order %d host ino %d is not locked",__func__,folio->index,folio_order(folio),folio_inode(folio)->i_ino);
-	}
-	#endif
+	// #ifdef CONFIG_F2FS_DEBUG_PRINT
+	// if(folio_test_locked(folio))
+	// {
+	// 	f2fs_err(F2FS_F_SB(folio),"%s yes folio index %d order %d host ino %d is locked",__func__,folio->index,folio_order(folio),folio_inode(folio)->i_ino);
+	// }
+	// else
+	// {
+	// 	f2fs_err(F2FS_F_SB(folio),"%s no!!! folio index %d order %d host ino %d is not locked",__func__,folio->index,folio_order(folio),folio_inode(folio)->i_ino);
+	// }
+	// #endif
 	struct f2fs_iomap_folio_state *fifs =folio->private;
 		bool uptodate = !error;
 		bool finished = true;
@@ -196,9 +196,6 @@ void f2fs_iomap_finish_folio_read(struct folio *folio, size_t off,size_t len, in
 			if(!error)
 			{	
 				uptodate=ifs_set_range_uptodate(folio, (struct iomap_folio_state*)fifs,off,len);
-				// #ifdef CONFIG_F2FS_DEBUG_PRINT
-				// FUNC(f2fs_ifs_print_uptodate_status,folio);
-				// #endif
 			}
 			finished = (fifs->read_bytes_pending == 0||fifs->read_bytes_pending==F2FS_IFS_MAGIC);
 			spin_unlock_irqrestore(&fifs->state_lock, flags);
@@ -585,6 +582,9 @@ void f2fs_submit_read_bio(struct f2fs_sb_info *sbi, struct bio *bio,
 	trace_f2fs_submit_read_bio(sbi->sb, type, bio);
 
 	iostat_update_submit_ctx(bio, type);
+	// #ifdef CONFIG_F2FS_DEBUG_PRINT
+	// FUNC(f2fs_list_folios_bio,bio);
+	// #endif
 	submit_bio(bio);
 }
 int f2fs_submit_read_bio_sync(struct bio *bio)
@@ -798,7 +798,9 @@ int f2fs_submit_page_bio(struct f2fs_io_info *fio)
 	struct folio *fio_folio = page_folio(fio->page);
 	struct folio *data_folio = fio->encrypted_page ?
 			page_folio(fio->encrypted_page) : fio_folio;
-
+	// #ifdef CONFIG_F2FS_DEBUG_PRINT
+	// FUNC(print_folio,data_folio);
+	// #endif
 	if (!f2fs_is_valid_blkaddr(fio->sbi, fio->new_blkaddr,
 			fio->is_por ? META_POR : (__is_meta_io(fio) ?
 			META_GENERIC : DATA_GENERIC_ENHANCE)))
@@ -811,7 +813,7 @@ int f2fs_submit_page_bio(struct f2fs_io_info *fio)
 
 	f2fs_set_bio_crypt_ctx(bio, fio_folio->mapping->host,
 			fio_folio->index, fio, GFP_NOIO);
-	bio_add_folio_nofail(bio, data_folio, PAGE_SIZE, folio_page_idx(data_folio,fio->page)<<PAGE_SHIFT);
+	bio_add_folio_nofail(bio, data_folio, PAGE_SIZE, folio_page_idx(data_folio,fio->encrypted_page ?fio->encrypted_page:fio->page)<<PAGE_SHIFT);
 
 	if (fio->io_wbc && !is_read_io(fio->op))
 		wbc_account_cgroup_owner(fio->io_wbc, fio_folio, PAGE_SIZE);
@@ -823,6 +825,7 @@ int f2fs_submit_page_bio(struct f2fs_io_info *fio)
 		f2fs_submit_read_bio(fio->sbi, bio, fio->type);
 	else
 		f2fs_submit_write_bio(fio->sbi, bio, fio->type);
+	fio->submitted = true;
 	return 0;
 }
 
@@ -1333,13 +1336,13 @@ struct folio *f2fs_get_read_data_folio(struct inode *inode, pgoff_t index,
 	int err;
 
 	folio = f2fs_grab_cache_folio(mapping, index, for_write);
-	#ifdef CONFIG_F2FS_DEBUG_PRINT
-	FUNC(print_folio, folio);
-	if(folio_test_locked(folio))
-	{
-		f2fs_err(F2FS_F_SB(folio),"folio index %d,order %d,host ino%d locked:",folio->index,folio_order(folio),folio->mapping->host->i_ino);
-	}
-	#endif
+	// #ifdef CONFIG_F2FS_DEBUG_PRINT
+	// FUNC(print_folio, folio);
+	// if(folio_test_locked(folio))
+	// {
+	// 	f2fs_err(F2FS_F_SB(folio),"folio index %d,order %d,host ino%d locked:",folio->index,folio_order(folio),folio->mapping->host->i_ino);
+	// }
+	// #endif
 	if (IS_ERR(folio))
 		return folio;
 
@@ -3041,7 +3044,9 @@ static inline bool need_inplace_update(struct f2fs_io_info *fio)
 
 	return f2fs_should_update_inplace(inode, fio);
 }
-
+#ifdef CONFIG_F2FS_DEBUG_PRINT
+__attribute__((optimize("O0")))
+#endif
 int f2fs_do_write_data_page(struct f2fs_io_info *fio)
 {
 	struct folio *folio = page_folio(fio->page);
@@ -3957,6 +3962,9 @@ handle_current_folio_error:
 		}
 		if(!submitted)
 		{
+			#ifdef CONFIG_F2FS_DEBUG_PRINT
+			f2fs_err(F2FS_I_SB(inode),"write_cache_folios submitted %d :no submitted folio",submitted);
+			#endif
 			// none of the folio's part go to writeback,we manually end_writeback after unlock it
 			if(folio_test_writeback(folio))
 				folio_end_writeback(folio);
