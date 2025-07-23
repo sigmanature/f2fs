@@ -9,7 +9,10 @@
  *  Moan early if gcc is old, avoiding bogus kernels - Paul Gortmaker, May '96
  *  Simplified starting of init:  Michael A. Griffith <grif@acm.org>
  */
-
+#define BANNER_CYAN    "\x1B[38;5;117m" // 亮青色 (亮蓝银色)
+#define BANNER_PURPLE  "\x1B[1;95m" // 亮洋红色 (紫色)
+#define BANNER_GREEN  "\x1B[1;92m" // 亮绿色
+#define BANNER_RESET   "\x1B[0m"  // 重置颜色
 #define DEBUG		/* Enable initcall_debug */
 
 #include <linux/types.h>
@@ -915,6 +918,46 @@ void start_kernel(void)
 	boot_cpu_init();
 	page_address_init();
 	pr_notice("%s", linux_banner);
+	// printk(KERN_ERR BANNER_CYAN " ______ ___  ______ _____   _                         __      _ _           " BANNER_RESET);
+	// printk(KERN_ERR BANNER_CYAN "|  ____|__ \\|  ____/ ____| | |                       / _|    | (_)          " BANNER_RESET);
+	// printk(KERN_ERR BANNER_CYAN "| |__     ) | |__ | (___   | | __ _ _ __ __ _  ___  | |_ ___ | |_  ___  ___ " BANNER_RESET);
+	// printk(KERN_ERR BANNER_CYAN "|  __|   / /|  __| \\___ \\  | |/ _` | '__/ _` |/ _ \\ |  _/ _ \\| | |/ _ \\/ __|" BANNER_RESET);
+	// printk(KERN_ERR BANNER_CYAN "| |     / /_| |    ____) | | | (_| | | | (_| |  __/ | || (_) | | | (_) \\__ \\" BANNER_RESET);
+	// printk(KERN_ERR BANNER_CYAN "|_|    |____|_|   |_____/  |_|\\__,_|_|  \\__, |\\___| |_| \\___/|_|_|\\___/|___/" BANNER_RESET);
+	// printk(KERN_ERR BANNER_CYAN "                                         __/ |                              " BANNER_RESET);
+	// printk(KERN_ERR BANNER_CYAN "                                        |___/                               " BANNER_RESET);
+	// printk(KERN_ERR BANNER_PURPLE"         ________   __" BANNER_GREEN "           _____ ____  __  __          _____  "BANNER_RESET);
+	// printk(KERN_ERR BANNER_PURPLE"        |  ____\\ \\ / /" BANNER_GREEN "          |_   _/ __ \\|  \\/  |   /\\   |  __ \\ "BANNER_RESET);
+	// printk(KERN_ERR BANNER_PURPLE"        | |__   \\ V /   ______" BANNER_GREEN "    | || |  | | \\  / |  /  \\  | |__) |"BANNER_RESET);
+	// printk(KERN_ERR BANNER_PURPLE"        |  __|   > <   |______|" BANNER_GREEN "   | || |  | | |\\/| | / /\\ \\ |  ___/ "BANNER_RESET);
+	// printk(KERN_ERR BANNER_PURPLE"        | |____ / . \\" BANNER_GREEN "            _| || |__| | |  | |/ ____ \\| |     "BANNER_RESET);
+	// printk(KERN_ERR BANNER_PURPLE"        |______/_/ \\_\\" BANNER_GREEN "          |_____\\____/|_|  |_/_/    \\_\\_|     "BANNER_RESET);
+	// printk(KERN_ERR BANNER_PURPLE"                                                            \n"BANNER_RESET);
+	// printk(KERN_ERR "                                                            \n"BANNER_RESET);
+printk(KERN_ERR BANNER_CYAN "┌───────────────────────────────────────────────────────────────────────────────┐" BANNER_RESET);
+printk(KERN_ERR BANNER_CYAN "│  ______ ___  ______ _____   _                         __      _ _             │" BANNER_RESET);
+printk(KERN_ERR BANNER_CYAN "│ |  ____|__ \\|  ____/ ____| | |                       / _|    | (_)            │" BANNER_RESET);
+printk(KERN_ERR BANNER_CYAN "│ | |__     ) | |__ | (___   | | __ _ _ __ __ _  ___  | |_ ___ | |_  ___  ___   │" BANNER_RESET);
+printk(KERN_ERR BANNER_CYAN "│ |  __|   / /|  __| \\___ \\  | |/ _` | '__/ _` |/ _ \\ |  _/ _ \\| | |/ _ \\/ __|  │" BANNER_RESET);
+printk(KERN_ERR BANNER_CYAN "│ | |     / /_| |    ____) | | | (_| | | | (_| |  __/ | || (_) | | | (_) \\__ \\  │" BANNER_RESET);
+printk(KERN_ERR BANNER_CYAN "│ |_|    |____|_|   |_____/  |_|\\__,_|_|  \\__, |\\___| |_| \\___/|_|_|\\___/|___/  │" BANNER_RESET);
+printk(KERN_ERR BANNER_CYAN "│                                         __/ |                                 │" BANNER_RESET);
+printk(KERN_ERR BANNER_CYAN "│                                        |___/                                  │" BANNER_RESET);
+printk(KERN_ERR BANNER_CYAN "│" BANNER_PURPLE "    ________   __" BANNER_GREEN "           _____ ____  __  __          _____                  "BANNER_CYAN"│" BANNER_RESET);
+printk(KERN_ERR BANNER_CYAN "│" BANNER_PURPLE "   |  ____\\ \\ / /" BANNER_GREEN "          |_   _/ __ \\|  \\/  |   /\\   |  __ \\                 "BANNER_CYAN"│" BANNER_RESET);
+printk(KERN_ERR BANNER_CYAN "│" BANNER_PURPLE "   | |__   \\ V /   ______" BANNER_GREEN "    | || |  | | \\  / |  /  \\  | |__) |                "BANNER_CYAN"│" BANNER_RESET);
+printk(KERN_ERR BANNER_CYAN "│" BANNER_PURPLE "   |  __|   > <   |______|" BANNER_GREEN "   | || |  | | |\\/| | / /\\ \\ |  ___/                 "BANNER_CYAN"│" BANNER_RESET);
+printk(KERN_ERR BANNER_CYAN "│" BANNER_PURPLE "   | |____ / . \\" BANNER_GREEN "            _| || |__| | |  | |/ ____ \\| |                     "BANNER_CYAN"│" BANNER_RESET);
+printk(KERN_ERR BANNER_CYAN "│" BANNER_PURPLE "   |______/_/ \\_\\" BANNER_GREEN "          |_____\\____/|_|  |_/_/    \\_\\_|                     "BANNER_CYAN"│" BANNER_RESET);
+printk(KERN_ERR BANNER_CYAN "│                                                                               │" BANNER_RESET);
+printk(KERN_ERR BANNER_CYAN "│                                                                               │" BANNER_RESET);
+printk(KERN_ERR BANNER_CYAN "└───────────────────────────────────────────────────────────────────────────────┘" BANNER_RESET);
+printk(KERN_ERR BANNER_CYAN "                            ┌────────────────────┐" BANNER_RESET);
+printk(KERN_ERR BANNER_CYAN "                            │ 队伍名: 蒸蒸日上   │" BANNER_RESET);
+printk(KERN_ERR BANNER_CYAN "                            │ 指导老师: 万夕里   │" BANNER_RESET);
+printk(KERN_ERR BANNER_CYAN "                            │ 项目导师: 宋宝华   │" BANNER_RESET);
+printk(KERN_ERR BANNER_CYAN "                            └────────────────────┘" BANNER_RESET);
+printk(KERN_ERR "\n" BANNER_RESET);
 	setup_arch(&command_line);
 	/* Static keys and static calls are needed by LSMs */
 	jump_label_init();
