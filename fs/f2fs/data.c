@@ -2713,7 +2713,7 @@ int f2fs_read_multi_folios(struct compress_ctx *cc, struct bio **bio_ret,
 		*bio_ret = NULL;
 		return 0;
 	}
-	f2fs_bug_on(sbi, cc->cluster_idx == NULL_CLUSTER);
+	f2fs_bug_on(F2FS_I_SB(inode), cc->cluster_idx == NULL_CLUSTER);
 	ret = __f2fs_get_compressed_pblks_info(
 		inode, cc->cluster_idx << cc->log_cluster_size, &pblks_info);
 	if (ret)
