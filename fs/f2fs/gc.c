@@ -1463,9 +1463,6 @@ static int move_data_page(struct inode *inode, block_t bidx, int gc_type,
 	struct folio *folio;
 	int err = 0;
 	folio = f2fs_get_lock_data_folio(inode, bidx, true);
-	#ifdef CONFIG_FS_IOMAP_DEBUG_PRINT
-	FUNC(print_folio,folio);
-	#endif
 	if (IS_ERR(folio))
 		return PTR_ERR(folio);
 

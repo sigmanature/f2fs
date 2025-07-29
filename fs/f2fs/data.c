@@ -626,9 +626,6 @@ static void f2fs_submit_write_bio(struct f2fs_sb_info *sbi, struct bio *bio,
 	WARN_ON_ONCE(is_read_io(bio_op(bio)));
 	trace_f2fs_submit_write_bio(sbi->sb, type, bio);
 	iostat_update_submit_ctx(bio, type);
-	#ifdef CONFIG_F2FS_DEBUG_PRINT
-	FUNC(f2fs_list_folios_bio,bio);
-	#endif
 	submit_bio(bio);
 }
 
@@ -798,9 +795,6 @@ int f2fs_submit_page_bio(struct f2fs_io_info *fio)
 	struct folio *fio_folio = page_folio(fio->page);
 	struct folio *data_folio = fio->encrypted_page ?
 			page_folio(fio->encrypted_page) : fio_folio;
-	// #ifdef CONFIG_F2FS_DEBUG_PRINT
-	// FUNC(print_folio,data_folio);
-	// #endif
 	if (!f2fs_is_valid_blkaddr(fio->sbi, fio->new_blkaddr,
 			fio->is_por ? META_POR : (__is_meta_io(fio) ?
 			META_GENERIC : DATA_GENERIC_ENHANCE)))
