@@ -14,12 +14,12 @@
 #include <linux/lz4.h>
 #include <linux/zstd.h>
 #include <linux/pagevec.h>
-
+#include <linux/f2fs_fs.h>
 #include "f2fs.h"
 #include "node.h"
 #include "segment.h"
 #include <trace/events/f2fs.h>
-
+#include "f2fs_ifs.h"
 static struct kmem_cache *cic_entry_slab;
 static struct kmem_cache *dic_entry_slab;
 
@@ -82,7 +82,17 @@ bool f2fs_is_compressed_page(struct folio *folio)
 		*((u32 *)folio->private) != F2FS_COMPRESSED_PAGE_MAGIC);
 	return true;
 }
-
+bool f2fs_is_compressed_folio(struct folio *folio)
+{ 
+	if(!folio_test_private(folio))
+		return false;
+	if(f2fs_folio_private_nonpointer(folio))
+		return false;
+	if(folio_order(folio)>0) /*compressed folio cunrrent don't support higer order*/
+		return false;	
+	f2fs_bug_on(F2FS_P_SB(&folio->page),*((u32*)folio->private)!= F2FS_COMPRESSED_PAGE_MAGIC);
+	return true;
+}
 static void f2fs_set_compressed_page(struct page *page,
 		struct inode *inode, pgoff_t index, void *data)
 {
