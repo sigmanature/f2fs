@@ -18,8 +18,8 @@
 #include "segment.h"
 #include "xattr.h"
 #include "iostat.h"
+#include "f2fs_ifs.h"
 #include <trace/events/f2fs.h>
-
 #define on_f2fs_build_free_nids(nm_i) mutex_is_locked(&(nm_i)->build_lock)
 
 static struct kmem_cache *nat_entry_slab;
@@ -2218,7 +2218,7 @@ static bool f2fs_dirty_node_folio(struct address_space *mapping,
 #endif
 	if (filemap_dirty_folio(mapping, folio)) {
 		inc_page_count(F2FS_M_SB(mapping), F2FS_DIRTY_NODES);
-		set_page_private_reference(&folio->page);
+		f2fs_set_folio_private_reference(folio);
 		return true;
 	}
 	return false;

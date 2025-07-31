@@ -27,9 +27,9 @@
 
 #include <linux/fscrypt.h>
 #include <linux/fsverity.h>
-
+#include <linux/iomap.h>
 struct pagevec;
-
+struct iomap_folio_state;
 #ifdef CONFIG_F2FS_CHECK_FS
 #define f2fs_bug_on(sbi, condition)	BUG_ON(condition)
 #else
@@ -743,6 +743,7 @@ enum {
 	F2FS_GET_BLOCK_PRE_DIO,
 	F2FS_GET_BLOCK_PRE_AIO,
 	F2FS_GET_BLOCK_PRECACHE,
+	F2FS_GET_BLOCK_IOMAP,
 };
 
 /*
@@ -1462,6 +1463,7 @@ enum {
 	PAGE_PRIVATE_INLINE_INODE,		/* inode page contains inline data */
 	PAGE_PRIVATE_REF_RESOURCE,		/* dirty page has referenced resources */
 	PAGE_PRIVATE_ATOMIC_WRITE,		/* data page from atomic write path */
+	PAGE_PRIVATE_DEFERRED_UNLOCK,  /* deffered unlock in write_cache_folios for cross cluster folio*/
 	PAGE_PRIVATE_MAX
 };
 
@@ -2561,7 +2563,17 @@ static inline void inc_page_count(struct f2fs_sb_info *sbi, int count_type)
 			count_type == F2FS_DIRTY_IMETA)
 		set_sbi_flag(sbi, SBI_IS_DIRTY);
 }
+static inline void inc_page_count_multiple(struct f2fs_sb_info *sbi, int count_type,int npages)
+{
+	atomic_add(npages,&sbi->nr_pages[count_type]);
 
+	if (count_type == F2FS_DIRTY_DENTS ||
+			count_type == F2FS_DIRTY_NODES ||
+			count_type == F2FS_DIRTY_META ||
+			count_type == F2FS_DIRTY_QDATA ||
+			count_type == F2FS_DIRTY_IMETA)
+		set_sbi_flag(sbi, SBI_IS_DIRTY);
+}
 static inline void inode_inc_dirty_pages(struct inode *inode)
 {
 	atomic_inc(&F2FS_I(inode)->dirty_pages);
@@ -3621,7 +3633,7 @@ void f2fs_update_inode_page(struct inode *inode);
 int f2fs_write_inode(struct inode *inode, struct writeback_control *wbc);
 void f2fs_evict_inode(struct inode *inode);
 void f2fs_handle_failed_inode(struct inode *inode);
-
+bool f2fs_should_use_buffered_iomap(struct inode *inode);
 /*
  * namei.c
  */
@@ -3973,6 +3985,10 @@ struct folio *f2fs_get_new_data_folio(struct inode *inode,
 			struct folio *ifolio, pgoff_t index, bool new_i_size);
 int f2fs_do_write_data_page(struct f2fs_io_info *fio);
 int f2fs_map_blocks(struct inode *inode, struct f2fs_map_blocks *map, int flag);
+int f2fs_map_blocks_iomap(struct inode*inode,block_t start, block_t len,
+	struct f2fs_map_blocks *map);
+int f2fs_map_blocks_preallocate(struct inode *inode,block_t start, block_t len,
+	struct f2fs_map_blocks *map);
 int f2fs_fiemap(struct inode *inode, struct fiemap_extent_info *fieinfo,
 			u64 start, u64 len);
 int f2fs_encrypt_one_page(struct f2fs_io_info *fio);
@@ -3984,6 +4000,7 @@ int f2fs_write_single_data_page(struct folio *folio, int *submitted,
 				enum iostat_type io_type,
 				int compr_blocks, bool allow_balance);
 void f2fs_write_failed(struct inode *inode, loff_t to);
+void f2fs_set_iomap(struct inode*inode,struct f2fs_map_blocks*map,struct iomap*iomap);
 void f2fs_invalidate_folio(struct folio *folio, size_t offset, size_t length);
 bool f2fs_release_folio(struct folio *folio, gfp_t wait);
 bool f2fs_overwrite_io(struct inode *inode, loff_t pos, size_t len);
@@ -4276,6 +4293,7 @@ extern const struct file_operations f2fs_dir_operations;
 extern const struct file_operations f2fs_file_operations;
 extern const struct inode_operations f2fs_file_inode_operations;
 extern const struct address_space_operations f2fs_dblock_aops;
+extern const struct address_space_operations f2fs_iomap_aops;
 extern const struct address_space_operations f2fs_node_aops;
 extern const struct address_space_operations f2fs_meta_aops;
 extern const struct inode_operations f2fs_dir_inode_operations;
@@ -4314,7 +4332,8 @@ int f2fs_read_inline_dir(struct file *file, struct dir_context *ctx,
 int f2fs_inline_data_fiemap(struct inode *inode,
 			struct fiemap_extent_info *fieinfo,
 			__u64 start, __u64 len);
-
+void f2fs_iomap_prepare_read_inline(struct inode* inode,struct folio* ifolio,struct iomap* iomap,
+	loff_t pos,loff_t length);
 /*
  * shrinker.c
  */
@@ -4421,9 +4440,10 @@ enum cluster_check_type {
 	CLUSTER_RAW_BLKS    /* return # of raw blocks in a cluster */
 };
 bool f2fs_is_compressed_page(struct page *page);
+bool f2fs_is_compressed_folio(struct folio *folio);
 struct folio *f2fs_compress_control_folio(struct folio *folio);
 int f2fs_prepare_compress_overwrite(struct inode *inode,
-			struct page **pagep, pgoff_t index, void **fsdata);
+			struct page **pagep, pgoff_t index, void **fsdata,fgf_t fgp_flags);
 bool f2fs_compress_write_end(struct inode *inode, void *fsdata,
 					pgoff_t index, unsigned copied);
 int f2fs_truncate_partial_cluster(struct inode *inode, u64 from, bool lock);

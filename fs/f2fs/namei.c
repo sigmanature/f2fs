@@ -328,6 +328,8 @@ static struct inode *f2fs_new_inode(struct mnt_idmap *idmap,
 	f2fs_init_extent_tree(inode);
 
 	trace_f2fs_new_inode(inode, 0);
+	if(f2fs_should_use_buffered_iomap(inode))
+		mapping_set_large_folios(inode->i_mapping);
 	return inode;
 
 fail:
