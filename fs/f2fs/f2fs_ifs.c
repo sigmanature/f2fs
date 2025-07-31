@@ -144,6 +144,23 @@ struct f2fs_iomap_folio_state *f2fs_folio_get_private(struct folio *folio)
     
     return NULL;
 }
+unsigned f2fs_iomap_find_dirty_range(struct folio *folio, u64 *range_start,
+		u64 range_end)
+{
+	struct inode* inode=folio->mapping->host;
+	
+	if(folio_order(folio) == 0) 
+	 	return range_end-*range_start;
+	if(f2fs_compressed_file(inode))
+	{	
+		/*clamp range end to a cluster's size*/
+		int a=*range_start>>PAGE_SHIFT;
+		int b=cluster_i_idx(inode, a)<<F2FS_I(inode)->i_cluster_size;
+		int c=(F2FS_I(inode)->i_cluster_size - 1);
+		range_end=min(range_end,(i_end_idx_of_cluster(inode,*range_start>>PAGE_SHIFT)+1) << PAGE_SHIFT);
+	}
+	return iomap_find_dirty_range(folio, range_start, range_end);
+}
 void f2fs_ifs_clear_range_uptodate(struct folio *folio, struct f2fs_iomap_folio_state*fifs,size_t off, size_t len)
 {
 	struct inode *inode = folio->mapping->host;

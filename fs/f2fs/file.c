@@ -616,7 +616,6 @@ static int f2fs_file_open(struct inode *inode, struct file *filp)
 
 	return finish_preallocate_blocks(inode);
 }
-
 void f2fs_truncate_data_blocks_range(struct dnode_of_data *dn, int count)
 {
 	struct f2fs_sb_info *sbi = F2FS_I_SB(dn->inode);
@@ -741,7 +740,6 @@ truncate_out:
 	f2fs_folio_put(folio, true);
 	return 0;
 }
-
 int f2fs_do_truncate_blocks(struct inode *inode, u64 from, bool lock)
 {
 	struct f2fs_sb_info *sbi = F2FS_I_SB(inode);
@@ -2186,7 +2184,6 @@ static int f2fs_ioc_getversion(struct file *filp, unsigned long arg)
 
 	return put_user(inode->i_generation, (int __user *)arg);
 }
-
 static int f2fs_ioc_start_atomic_write(struct file *filp, bool truncate)
 {
 	struct inode *inode = file_inode(filp);
@@ -4966,12 +4963,11 @@ f2fs_buffered_write_iter(struct kiocb *iocb, struct iov_iter *from)
 		ret = generic_perform_write(iocb, from);
 	}
 	if (ret > 0) {
-		f2fs_update_iostat(F2FS_I_SB(inode), inode,
-						APP_BUFFERED_IO, ret);
+		f2fs_update_iostat(F2FS_I_SB(inode), inode, APP_BUFFERED_IO,
+				   ret);
 	}
 	return ret;
 }
-
 static int f2fs_dio_write_end_io(struct kiocb *iocb, ssize_t size, int error,
 				 unsigned int flags)
 {

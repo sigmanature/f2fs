@@ -20,7 +20,9 @@
 #include "trace.h"
 
 #include "../internal.h"
-
+#ifdef CONFIG_FS_IOMAP_DEBUG_PRINT
+#include "../fs_dbg.h"
+#endif
 /*
  * Structure allocated for each folio to track per-block uptodate, dirty state
  * and I/O completions.
@@ -45,14 +47,14 @@ static inline bool ifs_is_fully_uptodate(struct folio *folio,
 
 	return bitmap_full(ifs->state, i_blocks_per_folio(inode, folio));
 }
-
-static inline bool ifs_block_is_uptodate(struct iomap_folio_state *ifs,
+/*My change: remove static */
+inline bool ifs_block_is_uptodate(struct iomap_folio_state *ifs,
 		unsigned int block)
 {
 	return test_bit(block, ifs->state);
 }
-
-static bool ifs_set_range_uptodate(struct folio *folio,
+/*My change: remove static*/
+bool ifs_set_range_uptodate(struct folio *folio,
 		struct iomap_folio_state *ifs, size_t off, size_t len)
 {
 	struct inode *inode = folio->mapping->host;
@@ -63,8 +65,9 @@ static bool ifs_set_range_uptodate(struct folio *folio,
 	bitmap_set(ifs->state, first_blk, nr_blks);
 	return ifs_is_fully_uptodate(folio, ifs);
 }
-
-static void iomap_set_range_uptodate(struct folio *folio, size_t off,
+EXPORT_SYMBOL_GPL(ifs_set_range_uptodate);
+/*My change: remove static*/
+void iomap_set_range_uptodate(struct folio *folio, size_t off,
 		size_t len)
 {
 	struct iomap_folio_state *ifs = folio->private;
@@ -80,7 +83,8 @@ static void iomap_set_range_uptodate(struct folio *folio, size_t off,
 	if (uptodate)
 		folio_mark_uptodate(folio);
 }
-
+/*Mychange: add export*/
+EXPORT_SYMBOL_GPL(iomap_set_range_uptodate);
 static inline bool ifs_block_is_dirty(struct folio *folio,
 		struct iomap_folio_state *ifs, int block)
 {
@@ -114,8 +118,8 @@ static unsigned ifs_find_dirty_range(struct folio *folio,
 	*range_start = folio_pos(folio) + (start_blk << inode->i_blkbits);
 	return nblks << inode->i_blkbits;
 }
-
-static unsigned iomap_find_dirty_range(struct folio *folio, u64 *range_start,
+/*My change: remove static*/
+unsigned iomap_find_dirty_range(struct folio *folio, u64 *range_start,
 		u64 range_end)
 {
 	struct iomap_folio_state *ifs = folio->private;
@@ -127,7 +131,7 @@ static unsigned iomap_find_dirty_range(struct folio *folio, u64 *range_start,
 		return ifs_find_dirty_range(folio, ifs, range_start, range_end);
 	return range_end - *range_start;
 }
-
+EXPORT_SYMBOL_GPL(iomap_find_dirty_range);
 static void ifs_clear_range_dirty(struct folio *folio,
 		struct iomap_folio_state *ifs, size_t off, size_t len)
 {
@@ -143,14 +147,14 @@ static void ifs_clear_range_dirty(struct folio *folio,
 	spin_unlock_irqrestore(&ifs->state_lock, flags);
 }
 
-static void iomap_clear_range_dirty(struct folio *folio, size_t off, size_t len)
+void iomap_clear_range_dirty(struct folio *folio, size_t off, size_t len)
 {
 	struct iomap_folio_state *ifs = folio->private;
 
 	if (ifs)
 		ifs_clear_range_dirty(folio, ifs, off, len);
 }
-
+EXPORT_SYMBOL_GPL(iomap_clear_range_dirty);
 static void ifs_set_range_dirty(struct folio *folio,
 		struct iomap_folio_state *ifs, size_t off, size_t len)
 {
@@ -165,15 +169,15 @@ static void ifs_set_range_dirty(struct folio *folio,
 	bitmap_set(ifs->state, first_blk + blks_per_folio, nr_blks);
 	spin_unlock_irqrestore(&ifs->state_lock, flags);
 }
-
-static void iomap_set_range_dirty(struct folio *folio, size_t off, size_t len)
+/*Mychange:remove static*/
+void iomap_set_range_dirty(struct folio *folio, size_t off, size_t len)
 {
 	struct iomap_folio_state *ifs = folio->private;
 
 	if (ifs)
 		ifs_set_range_dirty(folio, ifs, off, len);
 }
-
+EXPORT_SYMBOL_GPL(iomap_set_range_dirty);
 static struct iomap_folio_state *ifs_alloc(struct inode *inode,
 		struct folio *folio, unsigned int flags)
 {
@@ -226,7 +230,9 @@ static void ifs_free(struct folio *folio)
 /*
  * Calculate the range inside the folio that we actually need to read.
  */
-static void iomap_adjust_read_range(struct inode *inode, struct folio *folio,
+/*mychange 去掉了static*/
+__attribute__((optimize("O0")))
+void iomap_adjust_read_range(struct inode *inode, struct folio *folio,
 		loff_t *pos, loff_t length, size_t *offp, size_t *lenp)
 {
 	struct iomap_folio_state *ifs = folio->private;
@@ -283,7 +289,7 @@ static void iomap_adjust_read_range(struct inode *inode, struct folio *folio,
 	*offp = poff;
 	*lenp = plen;
 }
-
+EXPORT_SYMBOL_GPL(iomap_adjust_read_range);
 static void iomap_finish_folio_read(struct folio *folio, size_t off,
 		size_t len, int error)
 {
@@ -351,8 +357,8 @@ static int iomap_read_inline_data(const struct iomap_iter *iter,
 	iomap_set_range_uptodate(folio, offset, folio_size(folio) - offset);
 	return 0;
 }
-
-static inline bool iomap_block_needs_zeroing(const struct iomap_iter *iter,
+/*mychange 去掉了static*/
+inline bool iomap_block_needs_zeroing(const struct iomap_iter *iter,
 		loff_t pos)
 {
 	const struct iomap *srcmap = iomap_iter_srcmap(iter);
@@ -361,7 +367,7 @@ static inline bool iomap_block_needs_zeroing(const struct iomap_iter *iter,
 		(srcmap->flags & IOMAP_F_NEW) ||
 		pos >= i_size_read(iter->inode);
 }
-
+EXPORT_SYMBOL_GPL(iomap_block_needs_zeroing);
 static int iomap_readpage_iter(struct iomap_iter *iter,
 		struct iomap_readpage_ctx *ctx)
 {
@@ -678,7 +684,7 @@ static int iomap_read_folio_sync(loff_t block_start, struct folio *folio,
 	bio_add_folio_nofail(&bio, folio, plen, poff);
 	return submit_bio_wait(&bio);
 }
-
+__attribute__((optimize("O0")))
 static int __iomap_write_begin(const struct iomap_iter *iter, loff_t pos,
 		size_t len, struct folio *folio)
 {
@@ -773,7 +779,7 @@ static int iomap_write_begin_inline(const struct iomap_iter *iter,
 		return -EIO;
 	return iomap_read_inline_data(iter, folio);
 }
-
+__attribute__((optimize("O0")))
 static int iomap_write_begin(struct iomap_iter *iter, loff_t pos,
 		size_t len, struct folio **foliop)
 {
@@ -837,7 +843,7 @@ out_unlock:
 
 	return status;
 }
-
+__attribute__((optimize("O0")))
 static bool __iomap_write_end(struct inode *inode, loff_t pos, size_t len,
 		size_t copied, struct folio *folio)
 {
@@ -861,7 +867,7 @@ static bool __iomap_write_end(struct inode *inode, loff_t pos, size_t len,
 	filemap_dirty_folio(inode->i_mapping, folio);
 	return true;
 }
-
+__attribute__((optimize("O0")))
 static void iomap_write_end_inline(const struct iomap_iter *iter,
 		struct folio *folio, loff_t pos, size_t copied)
 {
@@ -883,6 +889,7 @@ static void iomap_write_end_inline(const struct iomap_iter *iter,
  * Returns true if all copied bytes have been written to the pagecache,
  * otherwise return false.
  */
+__attribute__((optimize("O0")))
 static bool iomap_write_end(struct iomap_iter *iter, loff_t pos, size_t len,
 		size_t copied, struct folio *folio)
 {
@@ -904,7 +911,7 @@ static bool iomap_write_end(struct iomap_iter *iter, loff_t pos, size_t len,
 
 	return __iomap_write_end(iter->inode, pos, len, copied, folio);
 }
-
+__attribute__((optimize("O0")))
 static int iomap_write_iter(struct iomap_iter *iter, struct iov_iter *i)
 {
 	ssize_t total_written = 0;
@@ -933,7 +940,10 @@ retry:
 
 		if (bytes > iomap_length(iter))
 			bytes = iomap_length(iter);
-
+		// /*my_debug*/
+		// printk(KERN_EMERG "iomap_write_iter: pos %lld, bytes %zu, offset %zu\n",
+		//        pos, bytes, offset);
+		/*my_debug*/
 		/*
 		 * Bring in the user page that we'll copy from _first_.
 		 * Otherwise there's a nasty deadlock on copying from the
@@ -956,7 +966,9 @@ retry:
 		}
 		if (iter->iomap.flags & IOMAP_F_STALE)
 			break;
-
+		// /*my_debug*/
+		// printk(KERN_EMERG "iomap_write_iter: folio order %d\n",folio_order(folio));
+		// /*my_debug*/
 		offset = offset_in_folio(folio, pos);
 		if (bytes > folio_size(folio) - offset)
 			bytes = folio_size(folio) - offset;
@@ -965,6 +977,9 @@ retry:
 			flush_dcache_folio(folio);
 
 		copied = copy_folio_from_iter_atomic(folio, offset, bytes, i);
+		// /*my_debug*/
+		// printk(KERN_EMERG "iomap_write_iter: copied bytes %d\n",copied);
+		// /*my_debug*/
 		written = iomap_write_end(iter, pos, bytes, copied, folio) ?
 			  copied : 0;
 
@@ -1799,7 +1814,8 @@ static int iomap_writepage_map_blocks(struct iomap_writepage_ctx *wpc,
  * If the folio is entirely beyond i_size, return false.  If it straddles
  * i_size, adjust end_pos and zero all data beyond i_size.
  */
-static bool iomap_writepage_handle_eof(struct folio *folio, struct inode *inode,
+/*My change:remove static*/
+bool iomap_writepage_handle_eof(struct folio *folio, struct inode *inode,
 		u64 *end_pos)
 {
 	u64 isize = i_size_read(inode);
@@ -1850,7 +1866,7 @@ static bool iomap_writepage_handle_eof(struct folio *folio, struct inode *inode,
 
 	return true;
 }
-
+EXPORT_SYMBOL_GPL(iomap_writepage_handle_eof);
 static int iomap_writepage_map(struct iomap_writepage_ctx *wpc,
 		struct writeback_control *wbc, struct folio *folio)
 {

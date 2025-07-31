@@ -1577,7 +1577,25 @@ struct decompress_io_ctx {
 	struct work_struct verity_work;	/* work to verify the decompressed pages */
 	struct work_struct free_work;	/* work for late free this structure itself */
 };
-
+struct f2fs_readpage_ctx {
+	struct folio		*cur_folio;
+	bool			cur_folio_in_bio;
+	struct bio		*bio;
+	struct readahead_control *rac;
+#ifdef CONFIG_F2FS_FS_COMPRESSION
+	struct compress_ctx cc;
+	bool cur_folio_in_compress_ctx;
+#endif
+};
+struct f2fs_compressed_pblks_info
+{
+	bool is_from_extent;
+	unsigned int num_pblks;
+	union{
+		struct extent_info ei;
+		struct dnode_of_data dn;
+	}blk_info;
+};
 #define NULL_CLUSTER			((unsigned int)(~0))
 #define MIN_COMPRESS_LOG_SIZE		2
 #define MAX_COMPRESS_LOG_SIZE		8
@@ -3999,6 +4017,17 @@ int f2fs_write_single_data_page(struct folio *folio, int *submitted,
 				struct writeback_control *wbc,
 				enum iostat_type io_type,
 				int compr_blocks, bool allow_balance);
+int f2fs_write_single_data_folio(struct folio *folio, int *submitted_pages_count,
+				struct bio **bio_ptr, sector_t *last_block_ptr,
+				struct writeback_control *wbc,
+				enum iostat_type io_type,int compr_blocks,
+				bool from_compress, bool is_reclaim,
+				u64 start, u64 end);
+int f2fs_write_split_folio_range(struct address_space *mapping,
+					struct writeback_control *wbc,
+					enum iostat_type io_type,
+					pgoff_t start_index,
+					pgoff_t end_index,struct folio *first_folio);
 void f2fs_write_failed(struct inode *inode, loff_t to);
 void f2fs_set_iomap(struct inode*inode,struct f2fs_map_blocks*map,struct iomap*iomap);
 void f2fs_invalidate_folio(struct folio *folio, size_t offset, size_t length);
@@ -4009,8 +4038,39 @@ int f2fs_init_post_read_processing(void);
 void f2fs_destroy_post_read_processing(void);
 int f2fs_init_post_read_wq(struct f2fs_sb_info *sbi);
 void f2fs_destroy_post_read_wq(struct f2fs_sb_info *sbi);
+void f2fs_iomap_put_folio(struct inode *inode, loff_t pos, unsigned copied,struct folio *folio);
+struct folio* f2fs_iomap_get_folio(struct iomap_iter *iter, loff_t pos,
+			unsigned len);
+void f2fs_init_readpage_ctx(struct f2fs_readpage_ctx *ctx,struct readahead_control *rac);
+int f2fs_compress_iomap_readahead(struct inode *inode, struct readahead_control *rac);
+int f2fs_do_read_single_folio_iomap(struct iomap_iter *iter,struct f2fs_readpage_ctx *ctx, loff_t pos,loff_t plen, loff_t poff);	
+int f2fs_do_read_multi_folios(struct f2fs_readpage_ctx* ctx, loff_t pos,loff_t plen);
+int do_read_multi_folios(struct compress_ctx*cc, struct folio *folio, loff_t pos,
+				  loff_t plen, struct bio** bio_ret,
+				  struct readahead_control *rac,bool for_write);
+void f2fs_iomap_finish_folio_read(struct folio *folio, size_t off,size_t len, int error);
 extern const struct iomap_ops f2fs_iomap_ops;
-
+extern const struct iomap_folio_ops f2fs_iomap_folio_ops;
+extern const struct iomap_ops f2fs_buffered_read_iomap_ops;
+extern const struct iomap_ops f2fs_buffered_write_iomap_ops;
+extern const struct iomap_ops f2fs_buffered_write_atomic_iomap_ops;
+extern void iomap_adjust_read_range(struct inode *inode, struct folio *folio,
+		loff_t *pos, loff_t length, size_t *offp, size_t *lenp);
+extern bool iomap_block_needs_zeroing(const struct iomap_iter *iter,
+		loff_t pos);
+extern bool iomap_writepage_handle_eof(struct folio *folio, struct inode *inode,
+		u64 *end_pos);		
+extern void iomap_set_range_uptodate(struct folio *folio, size_t off,
+		size_t len);
+extern void iomap_set_range_dirty(struct folio *folio, size_t off, size_t len);
+extern void iomap_clear_range_dirty(struct folio *folio, size_t off, size_t len);
+extern unsigned iomap_find_dirty_range(struct folio *folio, u64 *range_start,
+		u64 range_end);
+extern int iomap_iter_advance(struct iomap_iter *iter, u64 *count);
+extern void ifs_set_range_dirty(struct folio *folio,
+		struct iomap_folio_state *ifs, size_t off, size_t len);
+extern bool ifs_set_range_uptodate(struct folio *folio,
+		struct iomap_folio_state *ifs, size_t off, size_t len);
 /*
  * gc.c
  */
@@ -4456,6 +4516,8 @@ void f2fs_decompress_cluster(struct decompress_io_ctx *dic, bool in_task);
 void f2fs_end_read_compressed_page(struct page *page, bool failed,
 				block_t blkaddr, bool in_task);
 bool f2fs_cluster_is_empty(struct compress_ctx *cc);
+bool f2fs_cluster_is_full(struct compress_ctx *cc);
+bool f2fs_cluster_is_partial_full(struct compress_ctx *cc);
 bool f2fs_cluster_can_merge_page(struct compress_ctx *cc, pgoff_t index);
 bool f2fs_all_cluster_page_ready(struct compress_ctx *cc, struct page **pages,
 				int index, int nr_pages, bool uptodate);
@@ -4473,6 +4535,8 @@ void f2fs_update_read_extent_tree_range_compressed(struct inode *inode,
 int f2fs_read_multi_pages(struct compress_ctx *cc, struct bio **bio_ret,
 				unsigned nr_pages, sector_t *last_block_in_bio,
 				struct readahead_control *rac, bool for_write);
+int f2fs_read_multi_folios(struct compress_ctx *cc, struct bio **bio_ret,
+			   struct readahead_control *rac, bool for_write);
 struct decompress_io_ctx *f2fs_alloc_dic(struct compress_ctx *cc);
 void f2fs_decompress_end_io(struct decompress_io_ctx *dic, bool failed,
 				bool in_task);
@@ -4496,6 +4560,14 @@ void f2fs_cache_compressed_page(struct f2fs_sb_info *sbi, struct page *page,
 bool f2fs_load_compressed_folio(struct f2fs_sb_info *sbi, struct folio *folio,
 								block_t blkaddr);
 void f2fs_invalidate_compress_pages(struct f2fs_sb_info *sbi, nid_t ino);
+void f2fs_compress_ctx_add_folio(struct compress_ctx *cc, struct folio *folio,loff_t pos,loff_t rlen);
+int f2fs_wait_cluster_uptodate(struct inode*inode,pgoff_t start_check_idx,unsigned int cluster_size);
+pgoff_t start_idx_of_cluster(struct compress_ctx *cc);
+pgoff_t cluster_idx(struct compress_ctx *cc, pgoff_t index);
+pgoff_t end_idx_of_cluster(struct compress_ctx *cc, pgoff_t index);
+pgoff_t cluster_i_idx(struct inode*inode,pgoff_t index);
+pgoff_t i_end_idx_of_cluster(struct inode*inode,pgoff_t index);
+unsigned int offset_i_in_cluster(struct inode*inode,pgoff_t index);
 #define inc_compr_inode_stat(inode)					\
 	do {								\
 		struct f2fs_sb_info *sbi = F2FS_I_SB(inode);		\

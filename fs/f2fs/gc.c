@@ -1222,7 +1222,6 @@ static int ra_data_block(struct inode *inode, pgoff_t index)
 	folio = f2fs_grab_cache_folio(mapping, index, true);
 	if (IS_ERR(folio))
 		return PTR_ERR(folio);
-
 	if (f2fs_lookup_read_extent_cache_block(inode, index,
 						&dn.data_blkaddr)) {
 		if (unlikely(!f2fs_is_valid_blkaddr(sbi, dn.data_blkaddr,
@@ -1260,7 +1259,6 @@ got_it:
 	f2fs_folio_wait_writeback(folio, DATA, true, true);
 
 	f2fs_wait_on_block_writeback(inode, dn.data_blkaddr);
-
 	fio.encrypted_page = f2fs_pagecache_get_page(META_MAPPING(sbi),
 					dn.data_blkaddr,
 					FGP_LOCK | FGP_CREAT, GFP_NOFS);
@@ -1315,12 +1313,14 @@ static int move_data_block(struct inode *inode, block_t bidx,
 	int type = fio.sbi->am.atgc_enabled && (gc_type == BG_GC) &&
 				(fio.sbi->gc_mode != GC_URGENT_HIGH) ?
 				CURSEG_ALL_DATA_ATGC : CURSEG_COLD_DATA;
-
+	
 	/* do not read out */
 	folio = f2fs_grab_cache_folio(mapping, bidx, false);
 	if (IS_ERR(folio))
 		return PTR_ERR(folio);
-
+	// #ifdef CONFIG_FS_IOMAP_DEBUG_PRINT
+	// FUNC(print_folio,folio);
+	// #endif
 	if (!check_valid_map(F2FS_I_SB(inode), segno, off)) {
 		err = -ENOENT;
 		goto out;
@@ -1454,7 +1454,6 @@ static int move_data_page(struct inode *inode, block_t bidx, int gc_type,
 {
 	struct folio *folio;
 	int err = 0;
-
 	folio = f2fs_get_lock_data_folio(inode, bidx, true);
 	if (IS_ERR(folio))
 		return PTR_ERR(folio);
@@ -1524,7 +1523,6 @@ out:
 	f2fs_folio_put(folio, true);
 	return err;
 }
-
 /*
  * This function tries to get parent node of victim data block, and identifies
  * data block validity. If the block is valid, copy that with cold status and

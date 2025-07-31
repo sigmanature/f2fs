@@ -2580,7 +2580,6 @@ static void update_sit_entry(struct f2fs_sb_info *sbi, block_t blkaddr, int del)
 	if (__is_large_section(sbi))
 		get_sec_entry(sbi, segno)->valid_blocks += del;
 }
-
 void f2fs_invalidate_blocks(struct f2fs_sb_info *sbi, block_t addr,
 				unsigned int len)
 {
@@ -3911,6 +3910,7 @@ static int log_type_to_seg_type(enum log_type type)
 static void do_write_page(struct f2fs_summary *sum, struct f2fs_io_info *fio)
 {
 	struct folio *folio = page_folio(fio->page);
+	/* LFS mode write path */
 	enum log_type type = __get_segment_type(fio);
 	int seg_type = log_type_to_seg_type(type);
 	bool keep_order = (f2fs_lfs_mode(fio->sbi) &&
@@ -3930,10 +3930,8 @@ static void do_write_page(struct f2fs_summary *sum, struct f2fs_io_info *fio)
 	}
 	if (GET_SEGNO(fio->sbi, fio->old_blkaddr) != NULL_SEGNO)
 		f2fs_invalidate_internal_cache(fio->sbi, fio->old_blkaddr, 1);
-
 	/* writeout dirty page into bdev */
 	f2fs_submit_page_write(fio);
-
 	f2fs_update_device_state(fio->sbi, fio->ino, fio->new_blkaddr, 1);
 out:
 	if (keep_order)
@@ -3981,7 +3979,7 @@ void f2fs_outplace_write_data(struct dnode_of_data *dn,
 {
 	struct f2fs_sb_info *sbi = fio->sbi;
 	struct f2fs_summary sum;
-
+	
 	f2fs_bug_on(sbi, dn->data_blkaddr == NULL_ADDR);
 	if (fio->io_type == FS_DATA_IO || fio->io_type == FS_CP_DATA_IO)
 		f2fs_update_age_extent_cache(dn);
