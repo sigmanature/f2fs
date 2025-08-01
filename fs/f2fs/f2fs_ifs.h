@@ -63,7 +63,7 @@ static void ifs_to_f2fs_ifs(void *ifs, struct f2fs_iomap_folio_state *fifs, stru
 }
 struct f2fs_iomap_folio_state *f2fs_ifs_alloc(struct folio *folio, gfp_t gfp,bool force_alloc);
 void f2fs_ifs_free(struct folio *folio);
-struct f2fs_iomap_folio_state *f2fs_folio_get_private(struct folio *folio);
+struct f2fs_iomap_folio_state *f2fs_folio_get_fifs(struct folio *folio);
 inline unsigned long f2fs_get_folio_private_data(struct folio *folio);
 inline int f2fs_set_folio_private_data(struct folio *folio,unsigned long data);
 inline void f2fs_clear_folio_private_data(struct folio *folio);
@@ -90,111 +90,5 @@ static inline bool is_f2fs_ifs(struct folio *folio)
     }
     return false;
 }
-#define F2FS_FOLIO_PRIVATE_GET_FUNC(name, flagname)                                \
-	static inline bool f2fs_folio_private_##name(struct folio *folio)          \
-	{   																	\
-		/* First try direct folio->private access for meta folio */                       \
-		if (folio_test_private(folio) &&                                   \
-		    test_bit(PAGE_PRIVATE_NOT_POINTER,                             \
-			     (unsigned long *)&folio->private)) {                  \
-			return test_bit(PAGE_PRIVATE_##flagname,                   \
-					(unsigned long *)&folio->private);        \
-		}																	\
-		/* For higher-order folios, use iomap folio state */               \
-		struct f2fs_iomap_folio_state *fifs =                              \
-			(struct f2fs_iomap_folio_state *)folio->private;           \
-		unsigned long *private_p;                                          \
-		if (unlikely(!fifs || !folio->mapping))                            \
-			return false;                                               \
-		/* Check magic number before accessing private data */             \
-		if (READ_ONCE(fifs->read_bytes_pending) != F2FS_IFS_MAGIC)         \
-			return false;                                               \
-		private_p = f2fs_ifs_private_flags_ptr(fifs, folio);               \
-		if (!private_p)                                                    \
-			return false;                                               \
-		/* Test bits directly on the 'private' slot */                     \
-		return test_bit(PAGE_PRIVATE_##flagname, private_p);               \
-	}
-
-#define F2FS_FOLIO_PRIVATE_SET_FUNC(name, flagname)                               \
-	static inline int f2fs_set_folio_private_##name(struct folio *folio)      \
-	{                                                                         \
-		/* For higher-order folios, use iomap folio state */             \
-		if (unlikely(!folio->mapping))                                   \
-			return -ENOENT;													\
-		bool force_alloc=f2fs_should_use_buffered_iomap(folio_inode(folio)); \
-		if (!force_alloc && !folio_test_private(folio)) {                 \
-			folio_attach_private(folio, (void *)0);                   \
-			set_bit(PAGE_PRIVATE_NOT_POINTER,                         \
-				(unsigned long *)&folio->private);               \
-			set_bit(PAGE_PRIVATE_##flagname,                          \
-				(unsigned long *)&folio->private);               \
-			return 0;                                                 \
-		}     															\
-		struct f2fs_iomap_folio_state *fifs =                            \
-			f2fs_ifs_alloc(folio, GFP_NOFS,true);                         \
-		if(unlikely(!fifs))                                              \
-			return -ENOMEM;                                           \
-		unsigned long *private_p;                                        \
-		WRITE_ONCE(fifs->read_bytes_pending, F2FS_IFS_MAGIC);            \
-		private_p = f2fs_ifs_private_flags_ptr(fifs, folio);             \
-		if (!private_p)                                                  \
-			return -EINVAL;                                           \
-		/* Set the bit atomically */                                     \
-		set_bit(PAGE_PRIVATE_##flagname, private_p);                     \
-		/* Ensure NOT_POINTER bit is also set if any F2FS flag is set */ \
-		if (PAGE_PRIVATE_##flagname != PAGE_PRIVATE_NOT_POINTER)         \
-			set_bit(PAGE_PRIVATE_NOT_POINTER, private_p);            \
-		return 0;                                                        \
-	}
-
-#define F2FS_FOLIO_PRIVATE_CLEAR_FUNC(name, flagname)                         \
-	static inline void f2fs_clear_folio_private_##name(                   \
-		struct folio *folio)                                          \
-	{                            										\
-			/* First try direct folio->private access */                  \
-		if (folio_test_private(folio) &&                              \
-		    test_bit(PAGE_PRIVATE_NOT_POINTER,                        \
-			     (unsigned long *)&folio->private)) {             \
-			clear_bit(PAGE_PRIVATE_##flagname,                    \
-				  (unsigned long *)&folio->private);          \
-			folio_detach_private(folio);                  \
-			return;                                               \
-		}                                                             \
-		/* For higher-order folios, use iomap folio state */         \
-		struct f2fs_iomap_folio_state *fifs =                         \
-			(struct f2fs_iomap_folio_state *)folio->private;      \
-		unsigned long *private_p;                                     \
-		if (unlikely(!fifs || !folio->mapping))                       \
-			return;                                               \
-		/* Check magic number before clearing */                      \
-		if (READ_ONCE(fifs->read_bytes_pending) != F2FS_IFS_MAGIC)    \
-			return; /* Not ours or state unclear */               \
-		private_p = f2fs_ifs_private_flags_ptr(fifs, folio);          \
-		if (!private_p)                                               \
-			return;                                               \
-		clear_bit(PAGE_PRIVATE_##flagname, private_p);                \
-	}
-
-// Generate the accessor functions using the macros
-F2FS_FOLIO_PRIVATE_GET_FUNC(nonpointer, NOT_POINTER);
-F2FS_FOLIO_PRIVATE_GET_FUNC(inline, INLINE_INODE);
-F2FS_FOLIO_PRIVATE_GET_FUNC(gcing, ONGOING_MIGRATION);
-F2FS_FOLIO_PRIVATE_GET_FUNC(atomic, ATOMIC_WRITE);
-F2FS_FOLIO_PRIVATE_GET_FUNC(reference, REF_RESOURCE);
-F2FS_FOLIO_PRIVATE_GET_FUNC(deferred_unlock, DEFERRED_UNLOCK);
-
-F2FS_FOLIO_PRIVATE_SET_FUNC(reference, REF_RESOURCE);
-F2FS_FOLIO_PRIVATE_SET_FUNC(inline, INLINE_INODE);
-F2FS_FOLIO_PRIVATE_SET_FUNC(gcing, ONGOING_MIGRATION);
-F2FS_FOLIO_PRIVATE_SET_FUNC(atomic, ATOMIC_WRITE);
-F2FS_FOLIO_PRIVATE_SET_FUNC(deferred_unlock, DEFERRED_UNLOCK);
-
-F2FS_FOLIO_PRIVATE_CLEAR_FUNC(reference, REF_RESOURCE);
-F2FS_FOLIO_PRIVATE_CLEAR_FUNC(inline, INLINE_INODE);
-F2FS_FOLIO_PRIVATE_CLEAR_FUNC(gcing, ONGOING_MIGRATION);
-F2FS_FOLIO_PRIVATE_CLEAR_FUNC(atomic, ATOMIC_WRITE);
-F2FS_FOLIO_PRIVATE_CLEAR_FUNC(deferred_unlock, DEFERRED_UNLOCK);
-// --- Data access functions ---
 #endif /* F2FS_IFS_H */
 

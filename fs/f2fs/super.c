@@ -1699,6 +1699,9 @@ static struct inode *f2fs_alloc_inode(struct super_block *sb)
 	init_once((void *) fi);
 
 	/* Initialize f2fs-specific inode info */
+	#ifdef CONFIG_F2FS_IOMAP_FOLIO_STATE
+	atomic_set(&fi->i_iomap_seq,0);
+	#endif
 	atomic_set(&fi->dirty_pages, 0);
 	atomic_set(&fi->i_compr_blocks, 0);
 	atomic_set(&fi->open_count, 0);

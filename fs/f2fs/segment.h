@@ -833,12 +833,15 @@ static inline bool valid_main_segno(struct f2fs_sb_info *sbi,
 static inline void verify_fio_blkaddr(struct f2fs_io_info *fio)
 {
 	struct f2fs_sb_info *sbi = fio->sbi;
-
-	if (__is_valid_data_blkaddr(fio->old_blkaddr))
-		verify_blkaddr(sbi, fio->old_blkaddr, __is_meta_io(fio) ?
-					META_GENERIC : DATA_GENERIC);
-	verify_blkaddr(sbi, fio->new_blkaddr, __is_meta_io(fio) ?
+	unsigned int i, cnt = fio->cnt ?fio->cnt: 1;
+	for(i=0;i<cnt;++i)
+	{
+		if (__is_valid_data_blkaddr(fio->old_blkaddr))
+			verify_blkaddr(sbi, fio->old_blkaddr, __is_meta_io(fio) ?
+						META_GENERIC : DATA_GENERIC);
+		verify_blkaddr(sbi, fio->new_blkaddr, __is_meta_io(fio) ?
 					META_GENERIC : DATA_GENERIC_ENHANCE);
+	}
 }
 
 /*
@@ -1050,4 +1053,37 @@ static inline void wake_up_discard_thread(struct f2fs_sb_info *sbi, bool force)
 wake_up:
 	dcc->discard_wake = true;
 	wake_up_interruptible_all(&dcc->discard_wait_queue);
+}
+enum f2fs_alloc_window {
+        F2FS_AWIN_SINGLE = 0,    /* L0 same single block allocation */
+        F2FS_AWIN_MAPLEN,        /* L1 */
+        F2FS_AWIN_DIRTYLEN,      /* L2 */
+        /* ... future ... */
+};
+static unsigned int f2fs_choose_alloc_count(struct f2fs_sb_info *sbi,
+struct folio *folio, unsigned dirty_len_bytes, const struct f2fs_map_blocks *map,
+enum f2fs_alloc_window win)
+{
+	unsigned avail = f2fs_usable_blks_in_seg(sbi, CURSEG_I(sbi, CURSEG_HOT_DATA)->segno)
+					- CURSEG_I(sbi, CURSEG_HOT_DATA)->next_blkoff;
+	unsigned dirty = F2FS_BLK_TO_BYTES(dirty_len_bytes);
+	unsigned want = 1;
+	switch (win) {
+		case F2FS_AWIN_SINGLE:
+		want = 1;
+		break;
+		case F2FS_AWIN_MAPLEN:
+		want = min_t(unsigned, map->m_len,dirty);
+		break;
+		case F2FS_AWIN_DIRTYLEN:
+		want = dirty;
+		break;
+		default:
+		want = 1;
+		break;
+ 	}
+	want = min_t(unsigned, want, avail ? avail : 1);
+	if (want > F2FS_WB_SUM_MAX)
+		want = F2FS_WB_SUM_MAX;
+	return want;
 }

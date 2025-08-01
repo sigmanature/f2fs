@@ -18,7 +18,9 @@
 #include "segment.h"
 #include "xattr.h"
 #include "iostat.h"
+#ifdef CONFIG_F2FS_IOMAP_FOLIO_STATE
 #include "f2fs_ifs.h"
+#endif
 #include <trace/events/f2fs.h>
 #define on_f2fs_build_free_nids(nm_i) mutex_is_locked(&(nm_i)->build_lock)
 

@@ -21,7 +21,9 @@
 #include "segment.h"
 #include "gc.h"
 #include "iostat.h"
+#ifdef CONFIG_F2FS_IOMAP_FOLIO_STATE
 #include "f2fs_ifs.h"
+#endif
 #include <trace/events/f2fs.h>
 
 static struct kmem_cache *victim_entry_slab;
@@ -1271,7 +1273,8 @@ got_it:
 		err = -ENOMEM;
 		goto put_folio;
 	}
-
+	fio.idx=0;/*Becasue we are submit a post work page here, set the index to 0*/
+	fio.cnt=1;
 	err = f2fs_submit_page_bio(&fio);
 	if (err)
 		goto put_encrypted_page;
@@ -1430,11 +1433,13 @@ static int move_data_block(struct inode *inode, block_t bidx,
 	fio.op = REQ_OP_WRITE;
 	fio.op_flags = REQ_SYNC;
 	fio.new_blkaddr = newaddr;
+	fio.idx=0;
+	fio.cnt=1;
 	f2fs_submit_page_write(&fio);
 
 	f2fs_update_iostat(fio.sbi, NULL, FS_GC_DATA_IO, F2FS_BLKSIZE);
 
-	f2fs_update_data_blkaddr(&dn, newaddr);
+		_blkaddr(&dn, newaddr);
 	set_inode_flag(inode, FI_APPEND_WRITE);
 
 	f2fs_put_page(fio.encrypted_page, 1);

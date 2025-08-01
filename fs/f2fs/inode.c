@@ -38,6 +38,7 @@ bool f2fs_should_use_buffered_iomap(struct inode *inode)
 		return false;
 	if (f2fs_has_inline_data(inode))
 		return false;
+	if (f2fs_is_compressed_file(inode))
 	return true;
 }
 void f2fs_mark_inode_dirty_sync(struct inode *inode, bool sync)

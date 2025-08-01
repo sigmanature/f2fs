@@ -19,7 +19,9 @@
 #include "node.h"
 #include "segment.h"
 #include <trace/events/f2fs.h>
+#ifdef CONFIG_F2FS_IOMAP_FOLIO_STATE
 #include "f2fs_ifs.h"
+#endif
 static struct kmem_cache *cic_entry_slab;
 static struct kmem_cache *dic_entry_slab;
 
@@ -71,26 +73,16 @@ static pgoff_t start_idx_of_cluster(struct compress_ctx *cc)
 	return cc->cluster_idx << cc->log_cluster_size;
 }
 
-bool f2fs_is_compressed_page(struct folio *folio)
-{
-	if (!folio->private)
-		return false;
-	if (folio_test_f2fs_nonpointer(folio))
-		return false;
-
-	f2fs_bug_on(F2FS_F_SB(folio),
-		*((u32 *)folio->private) != F2FS_COMPRESSED_PAGE_MAGIC);
-	return true;
-}
 bool f2fs_is_compressed_folio(struct folio *folio)
 { 
 	if(!folio_test_private(folio))
 		return false;
-	if(f2fs_folio_private_nonpointer(folio))
+	if(folio_test_f2fs_nonpointer(folio))
 		return false;
-	if(folio_order(folio)>0) /*compressed folio cunrrent don't support higer order*/
+	if(folio_order(folio)>0) /*compressed folio current don't support higer order*/
 		return false;	
-	f2fs_bug_on(F2FS_P_SB(&folio->page),*((u32*)folio->private)!= F2FS_COMPRESSED_PAGE_MAGIC);
+	f2fs_bug_on(F2FS_F_SB(folio),
+		*((u32 *)folio->private) != F2FS_COMPRESSED_PAGE_MAGIC);
 	return true;
 }
 static void f2fs_set_compressed_page(struct page *page,

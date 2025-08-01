@@ -6,7 +6,9 @@
 #include <linux/slab.h>
 #include <linux/sched.h> // For cond_resched()
 #include "f2fs.h"
-#include "f2fs_ifs.h" 
+#ifdef CONFIG_F2FS_IOMAP_FOLIO_STATE
+#include "f2fs_ifs.h"
+#endif 
 struct f2fs_iomap_folio_state *f2fs_ifs_alloc(struct folio *folio, gfp_t gfp,bool force_alloc)
 {
 	struct inode* inode= folio->mapping->host;
@@ -94,7 +96,7 @@ struct f2fs_iomap_folio_state *f2fs_ifs_alloc(struct folio *folio, gfp_t gfp,boo
 		return fifs;
 	}
 }
-void f2fs_ifs_free(struct folio *folio)
+void folio_detach_f2fs_private(struct folio *folio)
 {
 	struct f2fs_iomap_folio_state*fifs;
 	
@@ -124,7 +126,7 @@ void f2fs_ifs_free(struct folio *folio)
 	
 	kfree(fifs);
 }
-struct f2fs_iomap_folio_state *f2fs_folio_get_private(struct folio *folio)
+struct f2fs_iomap_folio_state *folio_get_f2fs_ifs(struct folio *folio)
 {
     if (!folio_test_private(folio))
         return NULL;
@@ -132,17 +134,11 @@ struct f2fs_iomap_folio_state *f2fs_folio_get_private(struct folio *folio)
     // 检查是否为标志位使用
     if (test_bit(PAGE_PRIVATE_NOT_POINTER, (unsigned long *)&folio->private))
         return NULL;
-        
-    void *private_data = folio->private;
-    if (!private_data)
-        return NULL;
-        
-    // 安全地检查 magic
-    struct f2fs_iomap_folio_state *fifs = private_data;
-    if (READ_ONCE(fifs->read_bytes_pending) == F2FS_IFS_MAGIC)
-        return fifs;
-    
-    return NULL;
+	/* Note we assume folio->private can be either ifs or f2fs_ifs here. Compresssed folios
+	should not call this function */
+    f2fs_bug_on(F2FS_F_SB(folio),
+		*((u32 *)folio->private) == F2FS_COMPRESSED_PAGE_MAGIC)    
+    return folio->private;
 }
 void f2fs_ifs_clear_range_uptodate(struct folio *folio, struct f2fs_iomap_folio_state*fifs,size_t off, size_t len)
 {
@@ -155,105 +151,4 @@ void f2fs_ifs_clear_range_uptodate(struct folio *folio, struct f2fs_iomap_folio_
 	bitmap_clear(fifs->state, first_blk, nr_blks);
 	spin_unlock_irqrestore(&fifs->state_lock, flags);
 }
-inline unsigned long f2fs_get_folio_private_data(struct folio *folio)
-{
-	struct f2fs_iomap_folio_state *fifs = 
-		(struct f2fs_iomap_folio_state *)folio->private;
-	unsigned long *private_p;
-	unsigned long data_val;
-	if (!folio->mapping)
-		return 0;
-	f2fs_bug_on(F2FS_I_SB(folio_inode(folio)),!fifs);
-	if (READ_ONCE(fifs->read_bytes_pending) != F2FS_IFS_MAGIC)
-		return 0;
 
-	private_p = f2fs_ifs_private_flags_ptr(fifs, folio);
-	if (!private_p)
-		return 0;
-
-	data_val = READ_ONCE(*private_p); // Read atomically
-
-	if (!test_bit(PAGE_PRIVATE_NOT_POINTER, &data_val))
-		return 0; // Return 0 if NOT_POINTER isn't set
-
-	return data_val >> PAGE_PRIVATE_MAX;
-}
-
-inline int f2fs_set_folio_private_data(struct folio *folio, unsigned long data)
-{
-	
-	if (unlikely(!folio->mapping))
-		return -ENOENT;
-	
-	struct f2fs_iomap_folio_state *fifs = f2fs_ifs_alloc(folio, GFP_NOFS, true);
-	if (unlikely(!fifs))
-		return -ENOMEM;
-	
-	unsigned long *private_p;
-	unsigned long old_val, new_val;
-	
-	private_p = f2fs_ifs_private_flags_ptr(fifs, folio);
-	if (!private_p)
-		return -EINVAL;
-
-	// Atomically set the data part and the NOT_POINTER bit using cmpxchg loop
-	do {
-		old_val = READ_ONCE(*private_p);
-		new_val = old_val;
-		// Clear old data bits (bits >= PAGE_PRIVATE_MAX)
-		new_val &= GENMASK(PAGE_PRIVATE_MAX - 1, 0);
-		// Set new data bits
-		new_val |= (data << PAGE_PRIVATE_MAX);
-		// Ensure NOT_POINTER is set
-		__set_bit(PAGE_PRIVATE_NOT_POINTER, &new_val);
-	} while (cmpxchg(private_p, old_val, new_val) != old_val);
-
-	return 0;
-}
-
-inline void f2fs_clear_folio_private_data(struct folio *folio)
-{	
-	struct f2fs_iomap_folio_state *fifs = 
-		(struct f2fs_iomap_folio_state *)folio->private;
-	unsigned long *private_p;
-	unsigned long old_val, new_val;
-	f2fs_bug_on(F2FS_I_SB(folio_inode(folio)),!fifs);
-	if (!folio->mapping)
-		return;
-	if (READ_ONCE(fifs->read_bytes_pending) != F2FS_IFS_MAGIC)
-		return;
-
-	private_p = f2fs_ifs_private_flags_ptr(fifs, folio);
-	if (!private_p)
-		return;
-
-	// Atomically clear the data part, leave flags untouched
-	do {
-		old_val = READ_ONCE(*private_p);
-		// If already no data bits set, nothing to do
-		if ((old_val >> PAGE_PRIVATE_MAX) == 0)
-			break;
-		new_val = old_val;
-		// Clear data bits
-		new_val &= GENMASK(PAGE_PRIVATE_MAX - 1, 0);
-	} while (cmpxchg(private_p, old_val, new_val) != old_val);
-}
-
-inline void f2fs_clear_folio_private_all(struct folio *folio)
-{
-	struct f2fs_iomap_folio_state *fifs = 
-		(struct f2fs_iomap_folio_state *)folio->private;
-	unsigned long *private_p;
-
-	if (unlikely(!fifs || !folio->mapping))
-		return;
-	if (READ_ONCE(fifs->read_bytes_pending) != F2FS_IFS_MAGIC)
-		return;
-
-	private_p = f2fs_ifs_private_flags_ptr(fifs, folio);
-	if (!private_p)
-		return;
-		
-	// Clear all private flags/data
-	*private_p = 0;
-}

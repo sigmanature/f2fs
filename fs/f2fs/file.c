@@ -834,6 +834,9 @@ free_next:
 out:
 	if (lock)
 		f2fs_unlock_op(sbi);
+	#ifdef CONFIG_F2FS_IOMAP_FOLIO_STATE
+	f2fs_iomap_seq_inc(dn->inode);
+	#endif
 free_partial:
 	/* lastly zero out the first data page */
 	if (!err)
