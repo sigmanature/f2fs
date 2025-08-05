@@ -1656,6 +1656,8 @@ struct f2fs_sb_info {
 	unsigned int max_open_zones;		/* max open zone resources of the zoned device */
 	/* For adjust the priority writing position of data in zone UFS */
 	unsigned int blkzone_alloc_policy;
+	/* Used to adjust the BG_GC priority when issuing IO */
+	unsigned int bggc_block_io;
 #endif
 
 	/* for node-related operations */

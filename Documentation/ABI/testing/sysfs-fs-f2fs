@@ -908,6 +908,7 @@ Description:
 		- "auto:perf": lookup_mode is auto and fallback is disabled on-disk
 		- "auto:compat": lookup_mode is auto and fallback is enabled on-disk
 
+<<<<<<< HEAD
 What:		/sys/fs/f2fs/<disk>/bggc_io_aware
 Date:		August 2025
 Contact:	"Liao Yuanhong" <liaoyuanhong@vivo.com>
@@ -920,3 +921,17 @@ Description:	Used to adjust the BG_GC priority when pending IO, with a default v
 		bggc_io_aware = 1   skip background GC if there is pending read IO
 		bggc_io_aware = 2   don't aware IO for background GC
 		==================  ======================================================
+=======
+What:		/sys/fs/f2fs/<disk>/bggc_block_io
+Date:		August 2025
+Contact:	"Liao Yuanhong" <liaoyuanhong@vivo.com>
+Description:	Used to adjust the BG_GC priority when issuing IO, with a default value
+		of 1.
+
+		==================  =============================================
+		value				description
+		bggc_block_io = 0   Prioritize background GC
+		bggc_block_io = 1   Stop background GC only when issuing read I/O
+		bggc_block_io = 2   Stop background GC when issuing I/O
+		==================  =============================================
+>>>>>>> c3cb8dfacde0 (f2fs: Add bggc_block_io to adjust the priority of BG_GC when issuing IO)
