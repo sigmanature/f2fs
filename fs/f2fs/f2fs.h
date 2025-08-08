@@ -1281,6 +1281,8 @@ struct f2fs_io_info {
 	blk_opf_t op_flags;	/* req_flag_bits */
 	block_t new_blkaddr;	/* new block address to be written */
 	block_t old_blkaddr;	/* old block address before Cow */
+	pgoff_t idx; /*start page index within current active folio in this fio*/
+	unsigned int cnt; /*block cnts of the active folio, we assume they are continuous.*/
 	union {
 		struct page *page;	/* page to be written */
 		struct folio *folio;
