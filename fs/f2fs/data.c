@@ -3748,7 +3748,16 @@ void f2fs_invalidate_folio(struct folio *folio, size_t offset, size_t length)
 			f2fs_remove_dirty_inode(inode);
 		}
 	}
+#ifdef CONFIG_F2FS_IOMAP_FOLIO_STATE
+	/* Same to iomap_invalidate_folio*/
+	if (offset == 0 && length == folio_size(folio)) {
+		WARN_ON_ONCE(folio_test_writeback(folio));
+		folio_cancel_dirty(folio);
+		folio_detach_f2fs_private(folio);
+	}
+#else
 	folio_detach_private(folio);
+#endif
 }
 
 bool f2fs_release_folio(struct folio *folio, gfp_t wait)
@@ -3757,7 +3766,11 @@ bool f2fs_release_folio(struct folio *folio, gfp_t wait)
 	if (folio_test_dirty(folio))
 		return false;
 
+#ifdef CONFIG_F2FS_IOMAP_FOLIO_STATE
+	folio_detach_f2fs_private(folio);
+#else
 	folio_detach_private(folio);
+#endif
 	return true;
 }
 
