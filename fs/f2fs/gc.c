@@ -1475,22 +1475,31 @@ static int move_data_page(struct inode *inode, block_t bidx, int gc_type,
 			err = -EAGAIN;
 			goto out;
 		}
-		folio_mark_dirty(folio);
 		folio_set_f2fs_gcing(folio);
+#ifdef CONFIG_F2FS_IOMAP_FOLIO_STATE
+		if (!folio_test_large(folio)) {
+			folio_mark_dirty(folio);
+		} else {
+			f2fs_iomap_set_range_dirty(folio, (bidx - folio->index) << PAGE_SHIFT,
+				PAGE_SIZE);
+		}
+#else
+		folio_mark_dirty(folio);
+#endif
 	} else {
-		struct f2fs_io_info fio = {
-			.sbi = F2FS_I_SB(inode),
-			.ino = inode->i_ino,
-			.type = DATA,
-			.temp = COLD,
-			.op = REQ_OP_WRITE,
-			.op_flags = REQ_SYNC,
-			.old_blkaddr = NULL_ADDR,
-			.folio = folio,
-			.encrypted_page = NULL,
-			.need_lock = LOCK_REQ,
-			.io_type = FS_GC_DATA_IO,
-		};
+		struct f2fs_io_info fio = { .sbi = F2FS_I_SB(inode),
+					    .ino = inode->i_ino,
+					    .type = DATA,
+					    .temp = COLD,
+					    .op = REQ_OP_WRITE,
+					    .op_flags = REQ_SYNC,
+					    .old_blkaddr = NULL_ADDR,
+					    .folio = folio,
+					    .encrypted_page = NULL,
+					    .need_lock = LOCK_REQ,
+					    .io_type = FS_GC_DATA_IO,
+					    .idx = bidx - folio->index,
+					    .cnt = 1 };
 		bool is_dirty = folio_test_dirty(folio);
 
 retry:
