@@ -150,3 +150,13 @@ config F2FS_UNFAIR_RWSEM
 	help
 	  Use unfair rw_semaphore, if system configured IO priority by block
 	  cgroup.
+
+config F2FS_IOMAP_FOLIO_STATE
+	bool "F2FS folio per-block I/O state tracking"
+	depends on F2FS_FS && FS_IOMAP
+	help
+	  Enable a custom F2FS structure for tracking the I/O state
+	  (up-to-date, dirty) on a per-block basis within a memory folio.
+	  This structure stores F2FS private flag in its state flexible
+	  array while keeping compatibility with generic iomap_folio_state.
+	  Must be enabled if using iomap large folios support in F2FS.
