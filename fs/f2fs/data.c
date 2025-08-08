@@ -1537,8 +1537,11 @@ static bool map_is_mergeable(struct f2fs_sb_info *sbi,
 		return true;
 	if (flag == F2FS_GET_BLOCK_PRE_DIO)
 		return true;
-	if (flag == F2FS_GET_BLOCK_DIO &&
-		map->m_pblk == NULL_ADDR && blkaddr == NULL_ADDR)
+	if (flag == F2FS_GET_BLOCK_DIO && map->m_pblk == NULL_ADDR &&
+	    blkaddr == NULL_ADDR)
+		return true;
+	if (flag == F2FS_GET_BLOCK_IOMAP && map->m_pblk == NULL_ADDR &&
+	    blkaddr == NULL_ADDR)
 		return true;
 	return false;
 }
@@ -1676,6 +1679,10 @@ next_block:
 			if (map->m_next_pgofs)
 				*map->m_next_pgofs = pgofs + 1;
 			break;
+		case F2FS_GET_BLOCK_IOMAP:
+			if (map->m_next_pgofs)
+				*map->m_next_pgofs = pgofs + 1;
+			break;
 		default:
 			/* for defragment case */
 			if (map->m_next_pgofs)
@@ -1741,8 +1748,9 @@ skip:
 	else if (dn.ofs_in_node < end_offset)
 		goto next_block;
 
-	if (flag == F2FS_GET_BLOCK_PRECACHE) {
-		if (map->m_flags & F2FS_MAP_MAPPED) {
+	if (flag == F2FS_GET_BLOCK_PRECACHE || flag == F2FS_GET_BLOCK_IOMAP) {
+		if (map->m_flags & F2FS_MAP_MAPPED &&
+		    map->m_len > F2FS_MIN_EXTENT_LEN) {
 			unsigned int ofs = start_pgofs - map->m_lblk;
 
 			f2fs_update_read_extent_cache_range(&dn,
@@ -1786,8 +1794,9 @@ sync_out:
 		}
 	}
 
-	if (flag == F2FS_GET_BLOCK_PRECACHE) {
-		if (map->m_flags & F2FS_MAP_MAPPED) {
+	if (flag == F2FS_GET_BLOCK_PRECACHE || flag == F2FS_GET_BLOCK_IOMAP) {
+		if (map->m_flags & F2FS_MAP_MAPPED &&
+		    map->m_len > F2FS_MIN_EXTENT_LEN) {
 			unsigned int ofs = start_pgofs - map->m_lblk;
 
 			f2fs_update_read_extent_cache_range(&dn,
@@ -1805,6 +1814,34 @@ unlock_out:
 	}
 out:
 	trace_f2fs_map_blocks(inode, map, flag, err);
+	return err;
+}
+
+int f2fs_map_blocks_iomap(struct inode *inode, block_t start, block_t len,
+			  struct f2fs_map_blocks *map)
+{
+	int err = 0;
+
+	map->m_lblk = start; // Logical block number for the start pos
+	map->m_len = len; // Length in blocks
+	map->m_may_create = false;
+	map->m_seg_type =
+		f2fs_rw_hint_to_seg_type(F2FS_I_SB(inode), inode->i_write_hint);
+	err = f2fs_map_blocks(inode, map, F2FS_GET_BLOCK_IOMAP);
+	return err;
+}
+
+int f2fs_map_blocks_preallocate(struct inode *inode, block_t start, block_t len,
+				struct f2fs_map_blocks *map)
+{
+	int err = 0;
+
+	map->m_lblk = start;
+	map->m_len = len; // Length in blocks
+	map->m_may_create = true;
+	map->m_seg_type =
+		f2fs_rw_hint_to_seg_type(F2FS_I_SB(inode), inode->i_write_hint);
+	err = f2fs_map_blocks(inode, map, F2FS_GET_BLOCK_PRE_AIO);
 	return err;
 }
 
