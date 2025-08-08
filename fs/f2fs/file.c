@@ -4965,7 +4965,14 @@ static int f2fs_preallocate_blocks(struct kiocb *iocb, struct iov_iter *iter,
 		if (ret)
 			return ret;
 	}
-
+#ifdef CONFIG_F2FS_IOMAP_FOLIO_STATE
+	/* Buffered write can convert inline file to large normal file
+	 * when convert success, we uses mapping set large folios here
+	 */
+	if (f2fs_should_use_buffered_iomap(inode))
+		mapping_set_large_folios(inode->i_mapping);
+	set_inode_flag(inode, FI_IOMAP);
+#endif
 	/* Do not preallocate blocks that will be written partially in 4KB. */
 	map.m_lblk = F2FS_BLK_ALIGN(pos);
 	map.m_len = F2FS_BYTES_TO_BLK(pos + count);
@@ -4994,6 +5001,24 @@ static int f2fs_preallocate_blocks(struct kiocb *iocb, struct iov_iter *iter,
 	return map.m_len;
 }
 
+static ssize_t f2fs_iomap_buffered_write(struct kiocb *iocb, struct iov_iter *i)
+{
+	struct file *file = iocb->ki_filp;
+	struct inode *inode = file_inode(file);
+	ssize_t ret;
+
+	if (f2fs_is_atomic_file(inode)) {
+		ret = iomap_file_buffered_write(iocb, i,
+						&f2fs_buffered_write_atomic_iomap_ops,
+						&f2fs_iomap_write_ops, NULL);
+	} else {
+		ret = iomap_file_buffered_write(iocb, i,
+						&f2fs_buffered_write_iomap_ops,
+						&f2fs_iomap_write_ops, NULL);
+	}
+	return ret;
+}
+
 static ssize_t f2fs_buffered_write_iter(struct kiocb *iocb,
 					struct iov_iter *from)
 {
@@ -5004,7 +5029,11 @@ static ssize_t f2fs_buffered_write_iter(struct kiocb *iocb,
 	if (iocb->ki_flags & IOCB_NOWAIT)
 		return -EOPNOTSUPP;
 
-	ret = generic_perform_write(iocb, from);
+	if (f2fs_iomap_inode(inode)) {
+		ret = f2fs_iomap_buffered_write(iocb, from);
+	} else {
+		ret = generic_perform_write(iocb, from);
+	}
 
 	if (ret > 0) {
 		f2fs_update_iostat(F2FS_I_SB(inode), inode,

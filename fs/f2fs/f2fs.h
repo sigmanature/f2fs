@@ -762,6 +762,7 @@ struct extent_tree_info {
 #define F2FS_MAP_NEW		(1U << 0)
 #define F2FS_MAP_MAPPED		(1U << 1)
 #define F2FS_MAP_DELALLOC	(1U << 2)
+#define F2FS_MAP_NODNODE	(1U << 3)
 #define F2FS_MAP_FLAGS		(F2FS_MAP_NEW | F2FS_MAP_MAPPED |\
 				F2FS_MAP_DELALLOC)
 
@@ -837,49 +838,53 @@ enum {
 
 /* used for f2fs_inode_info->flags */
 enum {
-	FI_NEW_INODE,		/* indicate newly allocated inode */
-	FI_DIRTY_INODE,		/* indicate inode is dirty or not */
-	FI_AUTO_RECOVER,	/* indicate inode is recoverable */
-	FI_DIRTY_DIR,		/* indicate directory has dirty pages */
-	FI_INC_LINK,		/* need to increment i_nlink */
-	FI_ACL_MODE,		/* indicate acl mode */
-	FI_NO_ALLOC,		/* should not allocate any blocks */
-	FI_FREE_NID,		/* free allocated nide */
-	FI_NO_EXTENT,		/* not to use the extent cache */
-	FI_INLINE_XATTR,	/* used for inline xattr */
-	FI_INLINE_DATA,		/* used for inline data*/
-	FI_INLINE_DENTRY,	/* used for inline dentry */
-	FI_APPEND_WRITE,	/* inode has appended data */
-	FI_UPDATE_WRITE,	/* inode has in-place-update data */
-	FI_NEED_IPU,		/* used for ipu per file */
-	FI_ATOMIC_FILE,		/* indicate atomic file */
-	FI_DATA_EXIST,		/* indicate data exists */
-	FI_SKIP_WRITES,		/* should skip data page writeback */
-	FI_OPU_WRITE,		/* used for opu per file */
-	FI_DIRTY_FILE,		/* indicate regular/symlink has dirty pages */
-	FI_PREALLOCATED_ALL,	/* all blocks for write were preallocated */
-	FI_HOT_DATA,		/* indicate file is hot */
-	FI_EXTRA_ATTR,		/* indicate file has extra attribute */
-	FI_PROJ_INHERIT,	/* indicate file inherits projectid */
-	FI_PIN_FILE,		/* indicate file should not be gced */
-	FI_VERITY_IN_PROGRESS,	/* building fs-verity Merkle tree */
-	FI_COMPRESSED_FILE,	/* indicate file's data can be compressed */
-	FI_COMPRESS_CORRUPT,	/* indicate compressed cluster is corrupted */
-	FI_MMAP_FILE,		/* indicate file was mmapped */
-	FI_ENABLE_COMPRESS,	/* enable compression in "user" compression mode */
-	FI_COMPRESS_RELEASED,	/* compressed blocks were released */
-	FI_ALIGNED_WRITE,	/* enable aligned write */
-	FI_COW_FILE,		/* indicate COW file */
-	FI_ATOMIC_COMMITTED,	/* indicate atomic commit completed except disk sync */
-	FI_ATOMIC_DIRTIED,	/* indicate atomic file is dirtied */
-	FI_ATOMIC_REPLACE,	/* indicate atomic replace */
-	FI_OPENED_FILE,		/* indicate file has been opened */
-	FI_DONATE_FINISHED,	/* indicate page donation of file has been finished */
-	FI_MAX,			/* max flag, never be used */
+	FI_NEW_INODE, /* indicate newly allocated inode */
+	FI_DIRTY_INODE, /* indicate inode is dirty or not */
+	FI_AUTO_RECOVER, /* indicate inode is recoverable */
+	FI_DIRTY_DIR, /* indicate directory has dirty pages */
+	FI_INC_LINK, /* need to increment i_nlink */
+	FI_ACL_MODE, /* indicate acl mode */
+	FI_NO_ALLOC, /* should not allocate any blocks */
+	FI_FREE_NID, /* free allocated nide */
+	FI_NO_EXTENT, /* not to use the extent cache */
+	FI_INLINE_XATTR, /* used for inline xattr */
+	FI_INLINE_DATA, /* used for inline data*/
+	FI_INLINE_DENTRY, /* used for inline dentry */
+	FI_APPEND_WRITE, /* inode has appended data */
+	FI_UPDATE_WRITE, /* inode has in-place-update data */
+	FI_NEED_IPU, /* used for ipu per file */
+	FI_ATOMIC_FILE, /* indicate atomic file */
+	FI_DATA_EXIST, /* indicate data exists */
+	FI_SKIP_WRITES, /* should skip data page writeback */
+	FI_OPU_WRITE, /* used for opu per file */
+	FI_DIRTY_FILE, /* indicate regular/symlink has dirty pages */
+	FI_PREALLOCATED_ALL, /* all blocks for write were preallocated */
+	FI_HOT_DATA, /* indicate file is hot */
+	FI_EXTRA_ATTR, /* indicate file has extra attribute */
+	FI_PROJ_INHERIT, /* indicate file inherits projectid */
+	FI_PIN_FILE, /* indicate file should not be gced */
+	FI_VERITY_IN_PROGRESS, /* building fs-verity Merkle tree */
+	FI_COMPRESSED_FILE, /* indicate file's data can be compressed */
+	FI_COMPRESS_CORRUPT, /* indicate compressed cluster is corrupted */
+	FI_MMAP_FILE, /* indicate file was mmapped */
+	FI_ENABLE_COMPRESS, /* enable compression in "user" compression mode */
+	FI_COMPRESS_RELEASED, /* compressed blocks were released */
+	FI_ALIGNED_WRITE, /* enable aligned write */
+	FI_COW_FILE, /* indicate COW file */
+	FI_ATOMIC_COMMITTED, /* indicate atomic commit completed except disk sync */
+	FI_ATOMIC_DIRTIED, /* indicate atomic file is dirtied */
+	FI_ATOMIC_REPLACE, /* indicate atomic replace */
+	FI_OPENED_FILE, /* indicate file has been opened */
+	FI_DONATE_FINISHED, /* indicate page donation of file has been finished */
+	FI_IOMAP, /* indicate whether this inode should enable iomap*/
+	FI_MAX, /* max flag, never be used */
 };
 
 struct f2fs_inode_info {
 	struct inode vfs_inode;		/* serve a vfs inode */
+#ifdef CONFIG_F2FS_IOMAP_FOLIO_STATE
+	atomic64_t i_iomap_seq; /* for iomap_valid sequence number */
+#endif
 	unsigned long i_flags;		/* keep an inode flags for ioctl */
 	unsigned char i_advise;		/* use to give file attribute hints */
 	unsigned char i_dir_level;	/* use for dentry level for large dir */
@@ -2814,6 +2819,16 @@ static inline void inc_page_count(struct f2fs_sb_info *sbi, int count_type)
 		set_sbi_flag(sbi, SBI_IS_DIRTY);
 }
 
+static inline void inc_page_count_multiple(struct f2fs_sb_info *sbi,
+					   int count_type, int npages)
+{
+	atomic_add(npages, &sbi->nr_pages[count_type]);
+
+	if (count_type == F2FS_DIRTY_DENTS || count_type == F2FS_DIRTY_NODES ||
+	    count_type == F2FS_DIRTY_META || count_type == F2FS_DIRTY_QDATA ||
+	    count_type == F2FS_DIRTY_IMETA)
+		set_sbi_flag(sbi, SBI_IS_DIRTY);
+}
 static inline void inode_inc_dirty_pages(struct inode *inode)
 {
 	atomic_inc(&F2FS_I(inode)->dirty_pages);
@@ -3657,6 +3672,10 @@ static inline bool f2fs_is_cow_file(struct inode *inode)
 	return is_inode_flag_set(inode, FI_COW_FILE);
 }
 
+static inline bool f2fs_iomap_inode(struct inode *inode)
+{
+	return is_inode_flag_set(inode, FI_IOMAP);
+}
 static inline void *inline_data_addr(struct inode *inode, struct folio *folio)
 {
 	__le32 *addr = get_dnode_addr(inode, folio);
@@ -3880,7 +3899,17 @@ int f2fs_write_inode(struct inode *inode, struct writeback_control *wbc);
 void f2fs_remove_donate_inode(struct inode *inode);
 void f2fs_evict_inode(struct inode *inode);
 void f2fs_handle_failed_inode(struct inode *inode);
+#ifdef CONFIG_F2FS_IOMAP_FOLIO_STATE
+static inline void f2fs_iomap_seq_inc(struct inode *inode)
+{
+	atomic64_inc(&F2FS_I(inode)->i_iomap_seq);
+}
 
+static inline u64 f2fs_iomap_seq_read(struct inode *inode)
+{
+	return atomic64_read(&F2FS_I(inode)->i_iomap_seq);
+}
+#endif
 /*
  * namei.c
  */
@@ -4248,6 +4277,9 @@ int f2fs_write_single_data_page(struct folio *folio, int *submitted,
 				enum iostat_type io_type,
 				int compr_blocks, bool allow_balance);
 void f2fs_write_failed(struct inode *inode, loff_t to);
+int f2fs_set_iomap(struct inode *inode, struct f2fs_map_blocks *map,
+		   struct iomap *iomap, unsigned int flags, loff_t offset,
+		   loff_t length, bool dio);
 void f2fs_invalidate_folio(struct folio *folio, size_t offset, size_t length);
 bool f2fs_release_folio(struct folio *folio, gfp_t wait);
 bool f2fs_overwrite_io(struct inode *inode, loff_t pos, size_t len);
@@ -4257,6 +4289,11 @@ void f2fs_destroy_post_read_processing(void);
 int f2fs_init_post_read_wq(struct f2fs_sb_info *sbi);
 void f2fs_destroy_post_read_wq(struct f2fs_sb_info *sbi);
 extern const struct iomap_ops f2fs_iomap_ops;
+
+extern const struct iomap_write_ops f2fs_iomap_write_ops;
+extern const struct iomap_ops f2fs_buffered_read_iomap_ops;
+extern const struct iomap_ops f2fs_buffered_write_iomap_ops;
+extern const struct iomap_ops f2fs_buffered_write_atomic_iomap_ops;
 
 /*
  * gc.c
@@ -4540,6 +4577,7 @@ extern const struct file_operations f2fs_dir_operations;
 extern const struct file_operations f2fs_file_operations;
 extern const struct inode_operations f2fs_file_inode_operations;
 extern const struct address_space_operations f2fs_dblock_aops;
+extern const struct address_space_operations f2fs_iomap_aops;
 extern const struct address_space_operations f2fs_node_aops;
 extern const struct address_space_operations f2fs_meta_aops;
 extern const struct inode_operations f2fs_dir_inode_operations;
@@ -4578,7 +4616,9 @@ int f2fs_read_inline_dir(struct file *file, struct dir_context *ctx,
 int f2fs_inline_data_fiemap(struct inode *inode,
 			struct fiemap_extent_info *fieinfo,
 			__u64 start, __u64 len);
-
+void f2fs_iomap_prepare_read_inline(struct inode *inode, struct folio *ifolio,
+				    struct iomap *iomap, loff_t pos,
+				    loff_t length);
 /*
  * shrinker.c
  */

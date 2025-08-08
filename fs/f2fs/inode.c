@@ -23,6 +23,24 @@
 extern const struct address_space_operations f2fs_compress_aops;
 #endif
 
+bool f2fs_should_use_buffered_iomap(struct inode *inode)
+{
+	if (!S_ISREG(inode->i_mode))
+		return false;
+	if (S_ISDIR(inode->i_mode) || S_ISLNK(inode->i_mode))
+		return false;
+	if (inode->i_mapping == NODE_MAPPING(F2FS_I_SB(inode)))
+		return false;
+	if (inode->i_mapping == META_MAPPING(F2FS_I_SB(inode)))
+		return false;
+	if (f2fs_encrypted_file(inode))
+		return false;
+	if (fsverity_active(inode))
+		return false;
+	if (f2fs_compressed_file(inode))
+		return false;
+	return true;
+}
 void f2fs_mark_inode_dirty_sync(struct inode *inode, bool sync)
 {
 	if (is_inode_flag_set(inode, FI_NEW_INODE))
@@ -611,7 +629,16 @@ make_now:
 	} else if (S_ISREG(inode->i_mode)) {
 		inode->i_op = &f2fs_file_inode_operations;
 		inode->i_fop = &f2fs_file_operations;
+#ifdef CONFIG_F2FS_IOMAP_FOLIO_STATE
+		if (f2fs_should_use_buffered_iomap(inode)) {
+			mapping_set_large_folios(inode->i_mapping);
+			set_inode_flag(inode, FI_IOMAP);
+			inode->i_mapping->a_ops = &f2fs_iomap_aops;
+		} else
+			inode->i_mapping->a_ops = &f2fs_dblock_aops;
+#else
 		inode->i_mapping->a_ops = &f2fs_dblock_aops;
+#endif
 	} else if (S_ISDIR(inode->i_mode)) {
 		inode->i_op = &f2fs_dir_inode_operations;
 		inode->i_fop = &f2fs_dir_operations;
