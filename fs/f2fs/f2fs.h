@@ -718,6 +718,7 @@ struct extent_tree_info {
 #define F2FS_MAP_NEW		(1U << 0)
 #define F2FS_MAP_MAPPED		(1U << 1)
 #define F2FS_MAP_DELALLOC	(1U << 2)
+#define F2FS_MAP_NODNODE	(1U << 3)
 #define F2FS_MAP_FLAGS		(F2FS_MAP_NEW | F2FS_MAP_MAPPED |\
 				F2FS_MAP_DELALLOC)
 
@@ -4042,7 +4043,7 @@ struct folio* f2fs_iomap_get_folio(struct iomap_iter *iter, loff_t pos,
 			unsigned len);
 void f2fs_init_readpage_ctx(struct f2fs_readpage_ctx *ctx,struct readahead_control *rac);
 int f2fs_compress_iomap_readahead(struct inode *inode, struct readahead_control *rac);
-int f2fs_do_read_single_folio_iomap(struct iomap_iter *iter,struct f2fs_readpage_ctx *ctx, loff_t pos,loff_t plen, loff_t poff);	
+int f2fs_do_read_single_folio_iomap(struct iomap_iter *iter,struct f2fs_readpage_ctx *ctx, loff_t pos,loff_t plen, loff_t poff);
 int f2fs_do_read_multi_folios(struct f2fs_readpage_ctx* ctx, loff_t pos,loff_t plen);
 int do_read_multi_folios(struct compress_ctx*cc, struct folio *folio, loff_t pos,
 				  loff_t plen, struct bio** bio_ret,
@@ -4058,7 +4059,7 @@ extern void iomap_adjust_read_range(struct inode *inode, struct folio *folio,
 extern bool iomap_block_needs_zeroing(const struct iomap_iter *iter,
 		loff_t pos);
 extern bool iomap_writepage_handle_eof(struct folio *folio, struct inode *inode,
-		u64 *end_pos);		
+		u64 *end_pos);
 extern void iomap_set_range_uptodate(struct folio *folio, size_t off,
 		size_t len);
 extern void iomap_set_range_dirty(struct folio *folio, size_t off, size_t len);
