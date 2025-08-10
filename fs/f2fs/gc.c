@@ -1264,9 +1264,6 @@ got_it:
 	f2fs_folio_wait_writeback(folio, DATA, true, true);
 
 	f2fs_wait_on_block_writeback(inode, dn.data_blkaddr);
-	#ifdef CONFIG_F2FS_DEBUG_PRINT
-	f2fs_err(F2FS_I_SB(inode),"%s folio index %d order %d ino%d blkaddr%d",__func__,folio_index(folio),folio_order(folio),inode->i_ino,dn.data_blkaddr);
-	#endif
 	fio.encrypted_page = f2fs_pagecache_get_page(META_MAPPING(sbi),
 					dn.data_blkaddr,
 					FGP_LOCK | FGP_CREAT, GFP_NOFS);
@@ -1321,7 +1318,7 @@ static int move_data_block(struct inode *inode, block_t bidx,
 	int type = fio.sbi->am.atgc_enabled && (gc_type == BG_GC) &&
 				(fio.sbi->gc_mode != GC_URGENT_HIGH) ?
 				CURSEG_ALL_DATA_ATGC : CURSEG_COLD_DATA;
-	
+
 	/* do not read out */
 	folio = f2fs_grab_cache_folio(mapping, bidx, false);
 	if (IS_ERR(folio))
@@ -1602,9 +1599,6 @@ next_step:
 			int err;
 
 			inode = f2fs_iget(sb, dni.ino);
-			#ifdef CONFIG_F2FS_DEBUG_PRINT
-			f2fs_err(F2FS_I_SB(inode),"In gc_data_segment phase 3:");
-			#endif
 			if (IS_ERR(inode))
 				continue;
 
@@ -1691,9 +1685,6 @@ next_step:
 
 			start_bidx = f2fs_start_bidx_of_node(nofs, inode)
 								+ ofs_in_node;
-			#ifdef CONFIG_F2FS_DEBUG_PRINT
-			f2fs_err(F2FS_I_SB(inode),"prepare to read block pg index is %d:",start_bidx);
-			#endif
 			if (f2fs_meta_inode_gc_required(inode))
 				err = move_data_block(inode, start_bidx,
 							gc_type, segno, off);

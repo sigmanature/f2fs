@@ -254,9 +254,6 @@ static void try_to_fix_pino(struct inode *inode)
 static int f2fs_do_sync_file(struct file *file, loff_t start, loff_t end,
 						int datasync, bool atomic)
 {
-	#ifdef CONFIG_F2FS_DIABLE_WB
-	return 0;
-	#endif
 	struct inode *inode = file->f_mapping->host;
 	struct f2fs_sb_info *sbi = F2FS_I_SB(inode);
 	nid_t ino = inode->i_ino;
@@ -4913,12 +4910,14 @@ static int f2fs_preallocate_blocks(struct kiocb *iocb, struct iov_iter *iter,
 		ret = f2fs_convert_inline_inode(inode);
 		if (ret)
 			return ret;
+		#ifdef CONFIG_F2FS_IOMAP
 		/*buffered write can convert inline file to large normal file
 		when convert success, we uses mapping set large folios here*/
 		if(f2fs_should_use_buffered_iomap(inode))
 			mapping_set_large_folios(inode->i_mapping);
-	}
 
+		#endif
+	}
 	/* Do not preallocate blocks that will be written partially in 4KB. */
 	map.m_lblk = F2FS_BLK_ALIGN(pos);
 	map.m_len = F2FS_BYTES_TO_BLK(pos + count);
@@ -4961,7 +4960,7 @@ static ssize_t f2fs_iomap_buffered_write(struct kiocb *iocb, struct iov_iter *i)
 	}
 	return ret;
 }
-//__attribute__((optimize("O0"))) 
+//__attribute__((optimize("O0")))
 static ssize_t
 f2fs_buffered_write_iter(struct kiocb *iocb, struct iov_iter *from)
 {
@@ -5139,7 +5138,7 @@ out:
 	trace_f2fs_direct_IO_exit(inode, pos, count, WRITE, ret);
 	return ret;
 }
-//__attribute__((optimize("O0"))) 
+//__attribute__((optimize("O0")))
 static ssize_t
 f2fs_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 {
