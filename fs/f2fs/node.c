@@ -859,12 +859,6 @@ int f2fs_get_dnode_of_data(struct dnode_of_data *dn, pgoff_t index, int mode)
 	dn->ofs_in_node = offset[level];
 	dn->node_folio = nfolio[level];
 	dn->data_blkaddr = f2fs_data_blkaddr(dn);
-	#ifdef CONFIG_F2FS_DEBUG_PRINT
-	if(dn->inode->i_ino==266)
-	{
-		f2fs_print_dn_blkaddr(dn,index);
-	}
-	#endif
 	if (is_inode_flag_set(dn->inode, FI_COMPRESSED_FILE) &&
 					f2fs_sb_has_readonly(sbi)) {
 		unsigned int cluster_size = F2FS_I(dn->inode)->i_cluster_size;

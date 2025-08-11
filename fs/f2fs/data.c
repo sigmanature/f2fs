@@ -380,9 +380,9 @@ static void f2fs_write_end_io(struct bio *bio)
 	bio_for_each_folio_all(fi, bio) {
 		struct folio *folio = fi.folio;
 		enum count_type type;
-		#ifdef CONFIG_F2FS_DEBUG_PRINT
-		f2fs_err(sbi, "f2fs_write_end_io: folio index%d,order%d,host ino %lu",folio->index,folio_order(folio),folio->mapping->host->i_ino);
-		#endif
+		// #ifdef CONFIG_F2FS_DEBUG_PRINT
+		// f2fs_err(sbi, "f2fs_write_end_io: folio index%d,order%d,host ino %lu",folio->index,folio_order(folio),folio->mapping->host->i_ino);
+		// #endif
 
 		if (fscrypt_is_bounce_folio(folio)) {
 			struct folio *io_folio = folio;
@@ -1330,13 +1330,6 @@ struct folio *f2fs_get_read_data_folio(struct inode *inode, pgoff_t index,
 	int err;
 
 	folio = f2fs_grab_cache_folio(mapping, index, for_write);
-	// #ifdef CONFIG_F2FS_DEBUG_PRINT
-	// FUNC(print_folio, folio);
-	// if(folio_test_locked(folio))
-	// {
-	// 	f2fs_err(F2FS_F_SB(folio),"folio index %d,order %d,host ino%d locked:",folio->index,folio_order(folio),folio->mapping->host->i_ino);
-	// }
-	// #endif
 	if (IS_ERR(folio))
 		return folio;
 
@@ -1668,13 +1661,6 @@ static bool map_is_mergeable(struct f2fs_sb_info *sbi,
  * maps continuous logical blocks to physical blocks, and return such
  * info via f2fs_map_blocks structure.
  */
-//__attribute__((optimize("O0")))
-/*
- * f2fs_map_blocks() tries to find or build mapping relationship which
- * maps continuous logical blocks to physical blocks, and return such
- * info via f2fs_map_blocks structure.
- */
-__attribute__((optimize("O0")))
 int f2fs_map_blocks(struct inode *inode, struct f2fs_map_blocks *map, int flag)
 {
 	unsigned int maxblocks = map->m_len;
@@ -2606,6 +2592,7 @@ f2fs_flush_compress_ctx_read(struct f2fs_compressed_pblks_info *cc_info,
 		if (f2fs_load_compressed_folio(sbi, cfolio, blkaddr)) {
 			if (atomic_dec_and_test(&dic->remaining_pages)) {
 				f2fs_decompress_cluster(dic, true);
+
 				break;
 			}
 			continue;
@@ -2627,8 +2614,10 @@ submit_and_realloc:
 			if (IS_ERR(bio)) {
 				ret = PTR_ERR(bio);
 				bio = NULL;
+
 				f2fs_decompress_end_io(dic, ret,
 						       true); // Signal error
+
 				goto out_err; // Need proper error cleanup for cc
 			}
 			bio->bi_iter.bi_sector = sector; // Set start sector
@@ -2652,6 +2641,11 @@ out_err:
 	f2fs_destroy_compress_ctx(cc, false);
 	return ret; // Success
 }
+<<<<<<< HEAD
+=======
+#endif
+#ifdef CONFIG_F2FS_FS_COMPRESSION
+>>>>>>> 8c8857e432d8fb693d28f67171094555d5b70b8b
 __attribute__((optimize("O0")))
 int f2fs_read_multi_folios(struct compress_ctx *cc, struct bio **bio_ret,
 			   struct readahead_control *rac, bool for_write)
@@ -3247,10 +3241,6 @@ int f2fs_write_single_data_page(struct folio *folio, int *submitted,
 	folio_zero_segment(folio, offset, folio_size(folio));
 write:
 	/* Dentry/quota blocks are controlled by checkpoint */
-	#ifdef CONFIG_F2FS_DEBUG_PRINT
-	// f2fs_err(sbi, "f2fs_write_single_data_page called with folio index %lu, size %lu",
-	// 	folio->index, folio_size(folio));
-	#endif
 	if (S_ISDIR(inode->i_mode) || quota_inode) {
 		/*
 		 * We need to wait for node_write to avoid block allocation during
@@ -3821,9 +3811,17 @@ static int f2fs_write_cache_folios(struct address_space *mapping,
 				   struct writeback_control *wbc,
 				   enum iostat_type io_type)
 {
+<<<<<<< HEAD
+=======
+
+>>>>>>> 8c8857e432d8fb693d28f67171094555d5b70b8b
 	struct folio *folio = NULL;
 	int err = 0;
 	struct inode *inode = mapping->host;
+	#ifdef CONFIG_F2FS_DIABLE_WB
+	f2fs_err(F2FS_I_SB(inode),"CONFIG_F2FS_DIABLE_WB enable now disable writeback");
+	return 0;
+	#endif
 	u64 pos = 0;
 	u64 end_pos = 0;
 	u64 end_aligned=0;
@@ -5296,20 +5294,22 @@ int f2fs_do_read_multi_folios(struct f2fs_readpage_ctx* ctx, loff_t pos,loff_t p
 	ret =do_read_multi_folios(cc, folio, pos, plen,bio_ret,rac,false);
 	return ret;
 }
+__attribute__((optimize("O0")))
 int do_read_multi_folios(struct compress_ctx*cc, struct folio *folio, loff_t pos,
 				  loff_t plen, struct bio** bio_ret,
 				  struct readahead_control *rac,bool for_write)
 {
 	int ret = 0;
-	f2fs_compress_ctx_add_folio(cc, folio, pos,plen);
+	loff_t add_len = f2fs_compress_ctx_add_folio(cc, folio, pos,plen);
 	struct f2fs_iomap_folio_state* fifs = folio->private;
 	if(folio_order(folio)>0&&fifs)
 	{
 		spin_lock_irq(&fifs->state_lock);
-		fifs->read_bytes_pending += plen;
+		fifs->read_bytes_pending += add_len;
 		spin_unlock_irq(&fifs->state_lock);
 	}
 	#ifdef CONFIG_F2FS_DEBUG_PRINT
+    int folio_idx = folio->index ;
 	f2fs_err(F2FS_F_SB(folio),"after rbp add:");
 	FUNC(print_rbp,folio);
 	#endif
@@ -5395,6 +5395,12 @@ static int f2fs_buffered_write_iomap_begin(struct inode *inode, loff_t pos, loff
 	iomap->private = NULL;
 	iomap->folio_ops = &f2fs_iomap_folio_ops;
 	iomap->flags = 0;
+<<<<<<< HEAD
+=======
+	#ifdef CONFIG_F2FS_DEBUG_PRINT
+	f2fs_err(F2FS_I_SB(inode),"%s inode i_ino%d",__func__,inode->i_ino);
+	#endif
+>>>>>>> 8c8857e432d8fb693d28f67171094555d5b70b8b
 #ifdef CONFIG_F2FS_FS_COMPRESSION
 	pgoff_t index = pos >> PAGE_SHIFT;
 	struct compress_ctx cc = {

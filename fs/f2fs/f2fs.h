@@ -4560,7 +4560,7 @@ void f2fs_cache_compressed_page(struct f2fs_sb_info *sbi, struct page *page,
 bool f2fs_load_compressed_folio(struct f2fs_sb_info *sbi, struct folio *folio,
 								block_t blkaddr);
 void f2fs_invalidate_compress_pages(struct f2fs_sb_info *sbi, nid_t ino);
-void f2fs_compress_ctx_add_folio(struct compress_ctx *cc, struct folio *folio,loff_t pos,loff_t rlen);
+loff_t f2fs_compress_ctx_add_folio(struct compress_ctx *cc, struct folio *folio,loff_t pos,loff_t rlen);
 int f2fs_wait_cluster_uptodate(struct inode*inode,pgoff_t start_check_idx,unsigned int cluster_size);
 pgoff_t start_idx_of_cluster(struct compress_ctx *cc);
 pgoff_t cluster_idx(struct compress_ctx *cc, pgoff_t index);
