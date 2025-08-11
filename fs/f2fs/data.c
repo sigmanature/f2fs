@@ -2600,6 +2600,7 @@ f2fs_flush_compress_ctx_read(struct f2fs_compressed_pblks_info *cc_info,
 		if (f2fs_load_compressed_folio(sbi, cfolio, blkaddr)) {
 			if (atomic_dec_and_test(&dic->remaining_pages)) {
 				f2fs_decompress_cluster(dic, true);
+
 				break;
 			}
 			continue;
@@ -2621,8 +2622,10 @@ submit_and_realloc:
 			if (IS_ERR(bio)) {
 				ret = PTR_ERR(bio);
 				bio = NULL;
+
 				f2fs_decompress_end_io(dic, ret,
 						       true); // Signal error
+
 				goto out_err; // Need proper error cleanup for cc
 			}
 			bio->bi_iter.bi_sector = sector; // Set start sector
@@ -2646,6 +2649,8 @@ out_err:
 	f2fs_destroy_compress_ctx(cc, false);
 	return ret; // Success
 }
+#endif
+#ifdef CONFIG_F2FS_FS_COMPRESSION
 __attribute__((optimize("O0")))
 int f2fs_read_multi_folios(struct compress_ctx *cc, struct bio **bio_ret,
 			   struct readahead_control *rac, bool for_write)
@@ -5288,20 +5293,22 @@ int f2fs_do_read_multi_folios(struct f2fs_readpage_ctx* ctx, loff_t pos,loff_t p
 	ret =do_read_multi_folios(cc, folio, pos, plen,bio_ret,rac,false);
 	return ret;
 }
+__attribute__((optimize("O0")))
 int do_read_multi_folios(struct compress_ctx*cc, struct folio *folio, loff_t pos,
 				  loff_t plen, struct bio** bio_ret,
 				  struct readahead_control *rac,bool for_write)
 {
 	int ret = 0;
-	f2fs_compress_ctx_add_folio(cc, folio, pos,plen);
+	loff_t add_len = f2fs_compress_ctx_add_folio(cc, folio, pos,plen);
 	struct f2fs_iomap_folio_state* fifs = folio->private;
 	if(folio_order(folio)>0&&fifs)
 	{
 		spin_lock_irq(&fifs->state_lock);
-		fifs->read_bytes_pending += plen;
+		fifs->read_bytes_pending += add_len;
 		spin_unlock_irq(&fifs->state_lock);
 	}
 	#ifdef CONFIG_F2FS_DEBUG_PRINT
+    int folio_idx = folio->index ;
 	f2fs_err(F2FS_F_SB(folio),"after rbp add:");
 	FUNC(print_rbp,folio);
 	#endif

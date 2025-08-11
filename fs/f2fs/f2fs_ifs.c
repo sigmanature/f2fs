@@ -6,7 +6,7 @@
 #include <linux/slab.h>
 #include <linux/sched.h> // For cond_resched()
 #include "f2fs.h"
-#include "f2fs_ifs.h" 
+#include "f2fs_ifs.h"
 struct f2fs_iomap_folio_state *f2fs_ifs_alloc(struct folio *folio, gfp_t gfp,bool force_alloc)
 {
 	struct inode* inode= folio->mapping->host;
@@ -14,7 +14,7 @@ struct f2fs_iomap_folio_state *f2fs_ifs_alloc(struct folio *folio, gfp_t gfp,boo
 	if (folio_order(folio) == 0) {
 		if(!force_alloc)
 		{
-			WARN_ON_ONCE(1); 
+			WARN_ON_ONCE(1);
 			return NULL;
 		}
 		else
@@ -24,50 +24,50 @@ struct f2fs_iomap_folio_state *f2fs_ifs_alloc(struct folio *folio, gfp_t gfp,boo
 		*/
 			struct f2fs_iomap_folio_state *fifs;
 			alloc_size = sizeof(*fifs) + 2*sizeof(unsigned long);
-			fifs = kmalloc(alloc_size, gfp); 
+			fifs = kmalloc(alloc_size, gfp);
 			if (!fifs)
 				return NULL;
 			spin_lock_init(&fifs->state_lock);
 			WRITE_ONCE(fifs->read_bytes_pending, F2FS_IFS_MAGIC);
-        	atomic_set(&fifs->write_bytes_pending, 0); 
+        	atomic_set(&fifs->write_bytes_pending, 0);
 			unsigned int nr_blocks = i_blocks_per_folio(inode, folio);
 			if (folio_test_uptodate(folio))
 				bitmap_set(fifs->state, 0, nr_blocks);
 			if (folio_test_dirty(folio))
 				(fifs->state, nr_blocks, nr_blocks);
-			*f2fs_ifs_private_flags_ptr(fifs, folio) = 0; 
+			*f2fs_ifs_private_flags_ptr(fifs, folio) = 0;
 			folio_attach_private(folio, fifs);
 		}
 	}
 	struct f2fs_iomap_folio_state *fifs;
 	void *old_private;
 	size_t iomap_longs;
-	size_t total_longs;	
+	size_t total_longs;
 	WARN_ON_ONCE(!inode); // Should have an inode
 
 	old_private = folio_get_private(folio);
 
 	if (old_private) {
-		// Check if it's already our type using the magic number directly
-		if (READ_ONCE(((struct f2fs_iomap_folio_state *)old_private)->read_bytes_pending) == F2FS_IFS_MAGIC) {
-			return (struct f2fs_iomap_folio_state *)old_private; // Already ours
+		size_t rbp = READ_ONCE(((struct f2fs_iomap_folio_state *)old_private)->read_bytes_pending);
+		if (likely(rbp == F2FS_IFS_MAGIC || rbp > F2FS_IFS_MAGIC)) {
+    		return (struct f2fs_iomap_folio_state *)old_private;
 		} else {
 			// Non-NULL, not ours -> Allocate, Copy, Replace path
 			total_longs = f2fs_ifs_total_longs(folio);
 			alloc_size = sizeof(*fifs) + total_longs * sizeof(unsigned long);
 
-			fifs = kmalloc(alloc_size, gfp); 
+			fifs = kmalloc(alloc_size, gfp);
 			if (!fifs)
 				return NULL;
 
 			spin_lock_init(&fifs->state_lock);
-			*f2fs_ifs_private_flags_ptr(fifs, folio) = 0; 
+			*f2fs_ifs_private_flags_ptr(fifs, folio) = 0;
 			// Copy data from the presumed iomap_folio_state (old_private)
 			ifs_to_f2fs_ifs(old_private, fifs, folio);
 			WRITE_ONCE(fifs->read_bytes_pending, F2FS_IFS_MAGIC);
             atomic_set(f2fs_ifs_dirty_bytes_pending_ptr(fifs, folio), 0);
 			folio_change_private(folio, fifs);
-			kfree(old_private); 
+			kfree(old_private);
 			return fifs;
 		}
 	} else {
@@ -82,13 +82,13 @@ struct f2fs_iomap_folio_state *f2fs_ifs_alloc(struct folio *folio, gfp_t gfp,boo
 		spin_lock_init(&fifs->state_lock);
 
 		unsigned int nr_blocks = i_blocks_per_folio(inode, folio);
-		
+
 		if (folio_test_uptodate(folio))
 			bitmap_set(fifs->state, 0, nr_blocks);
 		if (folio_test_dirty(folio))
-			bitmap_set(fifs->state, nr_blocks, nr_blocks);		
+			bitmap_set(fifs->state, nr_blocks, nr_blocks);
 		WRITE_ONCE(fifs->read_bytes_pending, F2FS_IFS_MAGIC);
-        atomic_set(&fifs->write_bytes_pending, 0); 
+        atomic_set(&fifs->write_bytes_pending, 0);
         atomic_set(f2fs_ifs_dirty_bytes_pending_ptr(fifs, folio), 0);
 		folio_attach_private(folio, fifs);
 		return fifs;
@@ -97,28 +97,28 @@ struct f2fs_iomap_folio_state *f2fs_ifs_alloc(struct folio *folio, gfp_t gfp,boo
 void f2fs_ifs_free(struct folio *folio)
 {
 	struct f2fs_iomap_folio_state*fifs;
-	
+
 	if (!folio_test_private(folio))
 		return;
-		
+
 	// Check if it's using direct flags
 	if (test_bit(PAGE_PRIVATE_NOT_POINTER, (unsigned long *)&folio->private)) {
 		folio_detach_private(folio);
 		return;
 	}
-	
+
 	fifs = folio_detach_private(folio);
 	if (!fifs)
-		return; 
-	
+		return;
+
 	#ifdef CONFIG_F2FS_DEBUG_PRINT
 		f2fs_err(F2FS_I_SB(folio->mapping->host),"f2fs_ifs_free: %d, read_bytes_pending %x, write_bytes_pending %x",
 			folio_order(folio), READ_ONCE(fifs->read_bytes_pending),
 			atomic_read(&fifs->write_bytes_pending));
 	#endif
-	
+
 	if(is_f2fs_ifs(folio))
-	{	
+	{
 		WARN_ON_ONCE(READ_ONCE(fifs->read_bytes_pending) != F2FS_IFS_MAGIC);
 		WARN_ON_ONCE(atomic_read(&fifs->write_bytes_pending));
 	}
@@ -127,27 +127,27 @@ void f2fs_ifs_free(struct folio *folio)
 		WARN_ON_ONCE(READ_ONCE(fifs->read_bytes_pending) != 0);
 		WARN_ON_ONCE(atomic_read(&fifs->write_bytes_pending));
 	}
-	
+
 	kfree(fifs);
 }
 struct f2fs_iomap_folio_state *f2fs_folio_get_private(struct folio *folio)
 {
     if (!folio_test_private(folio))
         return NULL;
-        
+
     // 检查是否为标志位使用
     if (test_bit(PAGE_PRIVATE_NOT_POINTER, (unsigned long *)&folio->private))
         return NULL;
-        
+
     void *private_data = folio->private;
     if (!private_data)
         return NULL;
-        
+
     // 安全地检查 magic
     struct f2fs_iomap_folio_state *fifs = private_data;
     if (READ_ONCE(fifs->read_bytes_pending) == F2FS_IFS_MAGIC)
         return fifs;
-    
+
     return NULL;
 }
 __attribute__((optimize("O0")))
@@ -155,11 +155,11 @@ unsigned f2fs_iomap_find_dirty_range(struct folio *folio, u64 *range_start,
 		u64 range_end)
 {
 	struct inode* inode=folio->mapping->host;
-	
-	if(folio_order(folio) == 0) 
+
+	if(folio_order(folio) == 0)
 	 	return range_end-*range_start;
 	if(f2fs_compressed_file(inode))
-	{	
+	{
 		/*clamp range end to a cluster's size*/
 		int a=*range_start>>PAGE_SHIFT;
 		int b=cluster_i_idx(inode, a)<<F2FS_I(inode)->i_cluster_size;
@@ -181,7 +181,7 @@ void f2fs_ifs_clear_range_uptodate(struct folio *folio, struct f2fs_iomap_folio_
 }
 inline unsigned long f2fs_get_folio_private_data(struct folio *folio)
 {
-	struct f2fs_iomap_folio_state *fifs = 
+	struct f2fs_iomap_folio_state *fifs =
 		(struct f2fs_iomap_folio_state *)folio->private;
 	unsigned long *private_p;
 	unsigned long data_val;
@@ -205,17 +205,17 @@ inline unsigned long f2fs_get_folio_private_data(struct folio *folio)
 
 inline int f2fs_set_folio_private_data(struct folio *folio, unsigned long data)
 {
-	
+
 	if (unlikely(!folio->mapping))
 		return -ENOENT;
-	
+
 	struct f2fs_iomap_folio_state *fifs = f2fs_ifs_alloc(folio, GFP_NOFS, true);
 	if (unlikely(!fifs))
 		return -ENOMEM;
-	
+
 	unsigned long *private_p;
 	unsigned long old_val, new_val;
-	
+
 	private_p = f2fs_ifs_private_flags_ptr(fifs, folio);
 	if (!private_p)
 		return -EINVAL;
@@ -236,8 +236,8 @@ inline int f2fs_set_folio_private_data(struct folio *folio, unsigned long data)
 }
 
 inline void f2fs_clear_folio_private_data(struct folio *folio)
-{	
-	struct f2fs_iomap_folio_state *fifs = 
+{
+	struct f2fs_iomap_folio_state *fifs =
 		(struct f2fs_iomap_folio_state *)folio->private;
 	unsigned long *private_p;
 	unsigned long old_val, new_val;
@@ -265,7 +265,7 @@ inline void f2fs_clear_folio_private_data(struct folio *folio)
 
 inline void f2fs_clear_folio_private_all(struct folio *folio)
 {
-	struct f2fs_iomap_folio_state *fifs = 
+	struct f2fs_iomap_folio_state *fifs =
 		(struct f2fs_iomap_folio_state *)folio->private;
 	unsigned long *private_p;
 
@@ -277,7 +277,7 @@ inline void f2fs_clear_folio_private_all(struct folio *folio)
 	private_p = f2fs_ifs_private_flags_ptr(fifs, folio);
 	if (!private_p)
 		return;
-		
+
 	// Clear all private flags/data
 	*private_p = 0;
 }

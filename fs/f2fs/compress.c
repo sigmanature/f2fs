@@ -2182,8 +2182,13 @@ void f2fs_decompress_end_io(struct decompress_io_ctx *dic, bool failed,
                 folio_unlock(folio);
             }
         } else {
+			#ifdef CONFIG_F2FS_DEBUG_PRINT
+	        f2fs_err(F2FS_I_SB(dic->inode),"from %s:",__func__);
+			f2fs_err(F2FS_I_SB(dic->inode),"dic:%p",dic);
+	        #endif
             f2fs_iomap_finish_folio_read(folio, poff, num_to_skip << PAGE_SHIFT, 0);
         }
+	}
 	/*
 	 * Release the reference to the decompress_io_ctx that was being held
 	 * for I/O completion.
@@ -2427,7 +2432,7 @@ void f2fs_destroy_compress_cache(void)
 }
 /*Add part of folio into compress_ctx*/
 __attribute__((optimize("O0")))
-void f2fs_compress_ctx_add_folio(struct compress_ctx *cc, struct folio *folio,
+loff_t f2fs_compress_ctx_add_folio(struct compress_ctx *cc, struct folio *folio,
 				 loff_t pos, loff_t rlen)
 {
 	unsigned int cluster_ofs;
@@ -2446,6 +2451,7 @@ void f2fs_compress_ctx_add_folio(struct compress_ctx *cc, struct folio *folio,
 		cluster_ofs++;
 	}
 	cc->cluster_idx = cluster_idx(cc, folio->index+idx_in_folio);
+	return num_pages_to_add * PAGE_SIZE;
 }
 int f2fs_wait_cluster_uptodate(struct inode*inode,pgoff_t start_check_idx,unsigned int cluster_size)
 {

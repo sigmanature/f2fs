@@ -933,8 +933,8 @@ static int iomap_write_iter(struct iomap_iter *iter, struct iov_iter *i)
 retry:
 		offset = pos & (chunk - 1);
 		bytes = min(chunk - offset, bytes);
-		status = balance_dirty_pages_ratelimited_flags(mapping,
-							       bdp_flags);
+		// status = balance_dirty_pages_ratelimited_flags(mapping,
+							    //    bdp_flags);
 		if (unlikely(status))
 			break;
 
