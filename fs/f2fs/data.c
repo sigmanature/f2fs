@@ -1707,6 +1707,7 @@ next_dnode:
 			map->m_pblk = 0;
 		if (err == -ENOENT)
 			err = f2fs_map_no_dnode(inode, map, &dn, pgofs);
+		map->m_flags |=F2FS_MAP_NODNODE;
 		goto unlock_out;
 	}
 
@@ -1812,8 +1813,8 @@ next_dnode:
 			if (blkaddr == NEW_ADDR)
 				map->m_flags |= F2FS_MAP_DELALLOC;
 			/* DIO READ and hole case, should not map the blocks. 为文件空洞的时候不建立映射?*/
-			if (!(flag == F2FS_GET_BLOCK_DIO && is_hole &&
-			      !map->m_may_create))
+			if (!(flag == F2FS_GET_BLOCK_DIO && is_hole && !map->m_may_create)
+	&&!(flag == F2FS_GET_BLOCK_IOMAP && is_hole))
 				map->m_flags |= F2FS_MAP_MAPPED;
 
 			map->m_pblk = blkaddr;
@@ -1871,15 +1872,14 @@ skip:
 	// goto next_block;/*循环判断和跳转*/
 	/*后处理逻辑开始*/
 	if (flag == F2FS_GET_BLOCK_PRECACHE|| flag == F2FS_GET_BLOCK_IOMAP) {
-		if (map->m_flags & F2FS_MAP_MAPPED) {
+		if (map->m_flags & F2FS_MAP_MAPPED && map->m_len > F2FS_MIN_EXTENT_LEN) {
 			unsigned int ofs = start_pgofs - map->m_lblk;
 
-			f2fs_update_read_extent_cache_range(&dn, start_pgofs,
-							    map->m_pblk + ofs,
-							    map->m_len - ofs);
+			f2fs_update_read_extent_cache_range(&dn,
+				start_pgofs, map->m_pblk + ofs,
+				map->m_len - ofs);
 		}
 	}
-
 	f2fs_put_dnode(&dn);
 
 	if (map->m_may_create) {
@@ -1915,16 +1915,14 @@ sync_out:
 		}
 	}
 
-	if (flag == F2FS_GET_BLOCK_PRECACHE||flag== F2FS_GET_BLOCK_IOMAP) {
-		if (map->m_flags & F2FS_MAP_MAPPED) {
+	if (flag == F2FS_GET_BLOCK_PRECACHE|| flag == F2FS_GET_BLOCK_IOMAP) {
+		if (map->m_flags & F2FS_MAP_MAPPED && map->m_len > F2FS_MIN_EXTENT_LEN) {
 			unsigned int ofs = start_pgofs - map->m_lblk;
 
-			f2fs_update_read_extent_cache_range(&dn, start_pgofs,
-							    map->m_pblk + ofs,
-							    map->m_len - ofs);
+			f2fs_update_read_extent_cache_range(&dn,
+				start_pgofs, map->m_pblk + ofs,
+				map->m_len - ofs);
 		}
-		if (map->m_next_extent)
-			*map->m_next_extent = pgofs + 1;
 	}
 	f2fs_put_dnode(&dn);
 unlock_out:
@@ -5020,12 +5018,62 @@ static int f2fs_iomap_begin(struct inode *inode, loff_t offset, loff_t length,
 
 	return 0;
 }
+int f2fs_set_iomap(struct inode* inode,struct f2fs_map_blocks* map,struct iomap* iomap,unsigned int flags,loff_t offset,loff_t length,bool dio)
+{
+	iomap->offset = F2FS_BLK_TO_BYTES(map->m_lblk);
+	if (map->m_flags & F2FS_MAP_MAPPED) {
+		if(dio)
+		{
+			if (WARN_ON_ONCE(map->m_pblk == NEW_ADDR))
+				return -EINVAL;
+		}
+		iomap->length = F2FS_BLK_TO_BYTES(map->m_len);
+		iomap->bdev = map->m_bdev;
+		if(map->m_pblk != NEW_ADDR)
+		{
+			iomap->type = IOMAP_MAPPED;
+			iomap->flags |= IOMAP_F_MERGED;
+			iomap->addr = F2FS_BLK_TO_BYTES(map->m_pblk);
+		}
+		else
+		{
+			iomap->type = IOMAP_UNWRITTEN;
+			iomap->addr = IOMAP_NULL_ADDR;
+		}
+		// if (flags & IOMAP_WRITE && map->m_last_pblk)
+			// iomap->private = (void *)map->m_last_pblk;
+	} else {
+		if (dio && flags & IOMAP_WRITE)
+			return -ENOTBLK;
 
+		if (map->m_pblk == NULL_ADDR) {
+			if(map->m_flags & F2FS_MAP_NODNODE)
+				iomap->length = F2FS_BLK_TO_BYTES(*map->m_next_pgofs) -
+							iomap->offset;
+			else
+				iomap->length = F2FS_BLK_TO_BYTES(map->m_len);
+			iomap->type = IOMAP_HOLE;
+		} else if (map->m_pblk == NEW_ADDR) {
+			iomap->length = F2FS_BLK_TO_BYTES(map->m_len);
+			iomap->type = IOMAP_UNWRITTEN;
+		} else {
+			f2fs_bug_on(F2FS_I_SB(inode), 1);
+		}
+		iomap->addr = IOMAP_NULL_ADDR;
+	}
+
+	if (map->m_flags & F2FS_MAP_NEW)
+		iomap->flags |= IOMAP_F_NEW;
+	if ((inode->i_state & I_DIRTY_DATASYNC) ||
+	    offset + length > i_size_read(inode))
+		iomap->flags |= IOMAP_F_DIRTY;
+
+	return 0;
+}
 const struct iomap_ops f2fs_iomap_ops = {
 	.iomap_begin = f2fs_iomap_begin,
 };
 
-__attribute__((optimize("O0")))
 static int
 f2fs_buffered_read_iomap_begin(struct inode *inode, loff_t offset,
 			       loff_t length, unsigned int flags,
@@ -5034,14 +5082,12 @@ f2fs_buffered_read_iomap_begin(struct inode *inode, loff_t offset,
 	pgoff_t next_pgofs = 0;
 	int err;
 	struct f2fs_map_blocks map = {};
-	map.m_lblk = F2FS_BYTES_TO_BLK(offset); /*起始逻辑块号*/
+	map.m_lblk = F2FS_BYTES_TO_BLK(offset);
 	map.m_len = F2FS_BYTES_TO_BLK(offset + length - 1) - map.m_lblk + 1;
 	map.m_next_pgofs = &next_pgofs;
 	map.m_seg_type =
 		f2fs_rw_hint_to_seg_type(F2FS_I_SB(inode), inode->i_write_hint);
 	map.m_may_create = false;
-	struct extent_info ei = {};
-	bool use_extent = !is_inode_flag_set(inode, FI_NO_EXTENT);
 	if (is_sbi_flag_set(F2FS_I_SB(inode), SBI_IS_SHUTDOWN))
 		return -EIO;
 	/*
@@ -5050,66 +5096,15 @@ f2fs_buffered_read_iomap_begin(struct inode *inode, loff_t offset,
 	*/
 	if (flags & IOMAP_WRITE)
 		return -EINVAL;
-	if ((map.m_len >= F2FS_MIN_EXTENT_LEN ||
-	     f2fs_lookup_read_extent_cache(inode, map.m_lblk - 1, &ei)) &&
-	    use_extent) {
-		err = f2fs_map_blocks(inode, &map, F2FS_GET_BLOCK_IOMAP);
-		if (err)
-			return err;
-	} else {
-		err = f2fs_map_blocks(inode, &map, F2FS_GET_BLOCK_DEFAULT);
-		if (err)
-			return err;
-	}
-	iomap->offset = F2FS_BLK_TO_BYTES(map.m_lblk);
 
-	/*
-	* When inline encryption is enabled, sometimes I/O to an encrypted file
-	* has to be broken up to guarantee DUN contiguity.  Handle this by
-	* limiting the length of the mapping returned.
-	*/
-	map.m_len = fscrypt_limit_io_blocks(inode, map.m_lblk, map.m_len);
+	err = f2fs_map_blocks(inode, &map, F2FS_GET_BLOCK_IOMAP);
+	if (err)
+		return err;
 
-	/*
-	* We should never see delalloc or compressed extents here based on
-	* prior flushing and checks.
-	*/
 	if (WARN_ON_ONCE(map.m_pblk == COMPRESS_ADDR))
 		return -EINVAL;
 
-	if (map.m_flags & F2FS_MAP_MAPPED) {
-		if (WARN_ON_ONCE(map.m_pblk == NEW_ADDR))
-			return -EINVAL;
-
-		iomap->length = F2FS_BLK_TO_BYTES(map.m_len);
-		iomap->type = IOMAP_MAPPED;
-		iomap->flags |= IOMAP_F_MERGED;
-		iomap->bdev = map.m_bdev;
-		iomap->addr = F2FS_BLK_TO_BYTES(map.m_pblk);
-	} else {
-		if (flags & IOMAP_WRITE)
-			return -ENOTBLK;
-
-		if (map.m_pblk == NULL_ADDR) {
-			iomap->length =
-				F2FS_BLK_TO_BYTES(next_pgofs) - iomap->offset;
-			iomap->type = IOMAP_HOLE;
-		} else if (map.m_pblk == NEW_ADDR) {
-			iomap->length = F2FS_BLK_TO_BYTES(map.m_len);
-			iomap->type = IOMAP_UNWRITTEN;
-		} else {
-			f2fs_bug_on(F2FS_I_SB(inode), 1);
-		}
-		iomap->addr = IOMAP_NULL_ADDR;
-	}
-
-	if (map.m_flags & F2FS_MAP_NEW)
-		iomap->flags |= IOMAP_F_NEW;
-	if ((inode->i_state & I_DIRTY_DATASYNC) ||
-	    offset + length > i_size_read(inode))
-		iomap->flags |= IOMAP_F_DIRTY;
-
-	return 0;
+	return f2fs_set_iomap(inode,&map,iomap,flags,offset,length,false);
 }
 const struct iomap_ops f2fs_buffered_read_iomap_ops = {
 	.iomap_begin = f2fs_buffered_read_iomap_begin,
