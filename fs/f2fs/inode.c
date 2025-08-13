@@ -44,7 +44,6 @@ bool f2fs_should_use_buffered_iomap(struct inode *inode)
 #else
 bool f2fs_should_use_buffered_iomap(struct inode *inode)
 {
-	f2fs_err(F2FS_I_SB(inode),"bench ver disable iomap");
 	return false;
 }
 #endif
