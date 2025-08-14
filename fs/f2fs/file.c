@@ -5246,6 +5246,10 @@ out:
 static int f2fs_file_fadvise(struct file *filp, loff_t offset, loff_t len,
 		int advice)
 {
+	#ifdef CONFIG_F2FS_DISABLE_WB
+	// dump_stack();
+	return 0;
+	#endif
 	struct address_space *mapping;
 	struct backing_dev_info *bdi;
 	struct inode *inode = file_inode(filp);

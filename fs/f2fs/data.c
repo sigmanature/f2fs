@@ -4004,10 +4004,15 @@ static inline bool __should_serialize_io(struct inode *inode,
 	return false;
 }
 
+//__attribute__((optimize("O0")))
 static int __f2fs_write_data_pages(struct address_space *mapping,
 				   struct writeback_control *wbc,
 				   enum iostat_type io_type)
 {
+	#ifdef CONFIG_F2FS_DISABLE_WB
+	// dump_stack();
+	return 0;
+	#endif
 	struct inode *inode = mapping->host;
 	struct f2fs_sb_info *sbi = F2FS_I_SB(inode);
 	struct blk_plug plug;
@@ -4294,7 +4299,8 @@ reserve_block:
 		*blk_addr = ori_blk_addr;
 	return 0;
 }
-//__attribute__((optimize("O0")))
+
+// __attribute__((optimize("O0")))
 static int f2fs_write_begin(struct file *file, struct address_space *mapping,
 			    loff_t pos, unsigned len, struct folio **foliop,
 			    void **fsdata)
@@ -5375,7 +5381,7 @@ static void f2fs_iomap_readahead(struct readahead_control *rac)
 		iomap_readahead(rac, &f2fs_buffered_read_iomap_ops);
 }
 __attribute__((optimize("O0")))
-static int f2fs_buffered_write_iomap_begin(struct inode *inode, loff_t pos, loff_t length,
+static int f2fs_buffered_write_iomap_begin(struct inode *inode, loff_t offset, loff_t length,
 				unsigned flags, struct iomap *iomap,
 				struct iomap *srcmap)
 {
@@ -5383,7 +5389,7 @@ static int f2fs_buffered_write_iomap_begin(struct inode *inode, loff_t pos, loff
 	struct f2fs_map_blocks map = {};
 	struct folio *ifolio = NULL;
 	int err = 0;
-	iomap->offset = pos;
+	iomap->offset = offset;
 	iomap->bdev = sbi->sb->s_bdev; // Default block device
 	iomap->dax_dev = NULL;
 	iomap->private = NULL;
@@ -5393,27 +5399,27 @@ static int f2fs_buffered_write_iomap_begin(struct inode *inode, loff_t pos, loff
 	f2fs_err(F2FS_I_SB(inode),"%s inode i_ino%d",__func__,inode->i_ino);
 	#endif
 #ifdef CONFIG_F2FS_FS_COMPRESSION
-	pgoff_t index = pos >> PAGE_SHIFT;
+	pgoff_t index = offset >> PAGE_SHIFT;
 	struct compress_ctx cc = {
 			.inode = inode,
 			.log_cluster_size = F2FS_I(inode)->i_log_cluster_size,
 			.cluster_size = F2FS_I(inode)->i_cluster_size,
 			.cluster_idx = cluster_i_idx(inode,index),
 		};
-	if (pos<i_size_read(inode)&&f2fs_compressed_file(inode)&&f2fs_is_compressed_cluster(inode,index)) {
-		length=min_t(loff_t,length,i_size_read(inode)-pos);
+	if (offset<i_size_read(inode)&&f2fs_compressed_file(inode)&&f2fs_is_compressed_cluster(inode,index)) {
+		length=min_t(loff_t,length,i_size_read(inode)-offset);
 		struct iomap_iter* iter=container_of(iomap,struct iomap_iter,iomap);
 		struct bio*bio=NULL;
-		loff_t new_pos = pos;
+		loff_t new_offset = offset;
 		size_t poff;
 		size_t plen;
 		pgoff_t start_idx = start_idx_of_cluster(&cc);//Aligned to cluster's start page index
-		pgoff_t end_idx = ((pos+length)>>PAGE_SHIFT)-1;
+		pgoff_t end_idx = ((offset+length)>>PAGE_SHIFT)-1;
 		end_idx = end_idx_of_cluster(&cc,end_idx);//Aligned end idx to the last cluster's end
 		loff_t aligned_len=(end_idx-start_idx+1)<<PAGE_SHIFT;
 		#ifdef CONFIG_F2FS_DEBUG_PRINT
 		ssleep(1);
-		f2fs_err(F2FS_I_SB(inode),"current state:pos%d,end_idx%d",pos,end_idx);
+		f2fs_err(F2FS_I_SB(inode),"current state:offset%d,end_idx%d",offset,end_idx);
 		FUNC(f2fs_check_inode_folios_writeback, inode);
 		#endif // DEBUG
 		struct folio*folio=iomap_get_folio(iter,start_idx<<PAGE_SHIFT,aligned_len);
@@ -5430,9 +5436,9 @@ static int f2fs_buffered_write_iomap_begin(struct inode *inode, loff_t pos, loff
 			fifs->read_bytes_pending+=1;//Add a bias for read bytes_pending so folio_end_read will never be called
 			spin_unlock_irqrestore(&fifs->state_lock, flags);
 		}
-		iomap_adjust_read_range(inode,folio,&new_pos,aligned_len,&poff, &plen);
+		iomap_adjust_read_range(inode,folio,&new_offset,aligned_len,&poff, &plen);
 		end_idx =min(end_idx,folio->index+folio_nr_pages(folio));
-		for (int i=cluster_idx(&cc,new_pos>>PAGE_SHIFT)<<cc.log_cluster_size;;)
+		for (int i=cluster_idx(&cc,new_offset>>PAGE_SHIFT)<<cc.log_cluster_size;;)
 		{
     		if (cc.nr_cpages==NULL)
 			{
@@ -5494,7 +5500,7 @@ static int f2fs_buffered_write_iomap_begin(struct inode *inode, loff_t pos, loff
 		iomap->private = folio;
 		iomap->type = IOMAP_MAPPED;
 		iomap->addr = IOMAP_NULL_ADDR;
-		iomap->offset = pos;
+		iomap->offset = offset;
 		iomap->bdev = sbi->sb->s_bdev;
 		iomap->dax_dev = NULL;
 		iomap->flags = 0;
@@ -5512,7 +5518,7 @@ static int f2fs_buffered_write_iomap_begin(struct inode *inode, loff_t pos, loff
 		return err;
 		}
 
-        // pgoff_t index = pos >> PAGE_SHIFT;
+        // pgoff_t index = offset >> PAGE_SHIFT;
 		// pgoff_t cluster_idx =cluster_i_idx(inode,index);
 		// pgoff_t end_idx_of_cluster= i_end_idx_of_cluster(inode,index);
         // err=f2fs_prepare_compress_overwrite(inode, NULL,index,&iomap->private,0);
@@ -5522,9 +5528,9 @@ static int f2fs_buffered_write_iomap_begin(struct inode *inode, loff_t pos, loff
 		// {
         // 	iomap->type = IOMAP_MAPPED;
         // 	iomap->addr = IOMAP_NULL_ADDR;
-        // 	iomap->offset = pos;
-        // 	loff_t cluster_end_pos = (loff_t)end_idx_of_cluster << PAGE_SHIFT;
-        // 	loff_t bytes_to_cluster_end = cluster_end_pos - pos;
+        // 	iomap->offset = offset;
+        // 	loff_t cluster_end_offset = (loff_t)end_idx_of_cluster << PAGE_SHIFT;
+        // 	loff_t bytes_to_cluster_end = cluster_end_offset - offset;
         // 	iomap->length = min(length, bytes_to_cluster_end);
         // 	return 0;
 		// }
@@ -5532,7 +5538,7 @@ static int f2fs_buffered_write_iomap_begin(struct inode *inode, loff_t pos, loff
 #endif
 	if (f2fs_has_inline_data(inode)) {
 		// If the write starts and fits entirely within the inline area
-		if (pos + length <= MAX_INLINE_DATA(inode)) {
+		if (offset + length <= MAX_INLINE_DATA(inode)) {
 			ifolio = f2fs_get_inode_folio(sbi, inode->i_ino);
 			if (IS_ERR(ifolio))
 				return PTR_ERR(ifolio);
@@ -5540,7 +5546,7 @@ static int f2fs_buffered_write_iomap_begin(struct inode *inode, loff_t pos, loff
 			set_inode_flag(inode, FI_DATA_EXIST);
 			// Use your helper to populate iomap for inline case
 			f2fs_iomap_prepare_read_inline(inode, ifolio, iomap,
-						       pos, length);
+						       offset, length);
 			if (inode->i_nlink)
 				set_page_private_inline(
 					&ifolio->page); // Use f2fs helper
@@ -5549,8 +5555,8 @@ static int f2fs_buffered_write_iomap_begin(struct inode *inode, loff_t pos, loff
 			goto out; // Success for inline case
 		}
 	}
-	block_t start_blk = F2FS_BYTES_TO_BLK(pos);
-	block_t len_blks = F2FS_BYTES_TO_BLK(pos + length - 1) - start_blk + 1;
+	block_t start_blk = F2FS_BYTES_TO_BLK(offset);
+	block_t len_blks = F2FS_BYTES_TO_BLK(offset + length - 1) - start_blk + 1;
 	err = f2fs_map_blocks_iomap(inode, start_blk, len_blks, &map);
 	// start_blk+=map.m_len;
 	// len_blks-=map.m_len;
@@ -5566,54 +5572,13 @@ static int f2fs_buffered_write_iomap_begin(struct inode *inode, loff_t pos, loff
 	if (WARN_ON_ONCE(map.m_pblk == COMPRESS_ADDR))
 		return -EIO; // Should not happen for buffered write prep
 
-	loff_t map_start_bytes = F2FS_BLK_TO_BYTES(map.m_lblk);
-	loff_t offset_in_first_block = pos - map_start_bytes;
-
-	if (map.m_flags & F2FS_MAP_MAPPED) {
-
-		iomap->type = IOMAP_MAPPED;
-		iomap->bdev =
-			map.m_bdev;
-		if (map.m_pblk == NEW_ADDR) {
-			iomap->addr =IOMAP_NULL_ADDR;
-			iomap->type = IOMAP_UNWRITTEN;
-
-		} else {
-			// Existing block
-			iomap->addr = F2FS_BLK_TO_BYTES(map.m_pblk) +
-				      offset_in_first_block;
-			// Sanity check: ensure offset is non-negative
-			WARN_ON_ONCE(offset_in_first_block < 0);
-		}
-	} else {
-
-		if (map.m_pblk == NULL_ADDR && err == -ENOSPC) {
-			iomap->type = IOMAP_HOLE; // Report as hole
-			iomap->addr = IOMAP_NULL_ADDR;
-		} else {
-			f2fs_warn(sbi,"%s: Unexpected non-mapped state for write, ino=%lu, lblk=%llu, pblk=%llu, flags=%x, err=%d",__func__, inode->i_ino,(unsigned long long)map.m_lblk,(unsigned long long)map.m_pblk, map.m_flags,err);
-			return -EIO; // Unexpected state
-		}
-	}
-
-	// Calculate iomap->length: bytes available from 'pos' within the mapped extent
-	if (map.m_len > 0) {
-		loff_t mapped_bytes_total = F2FS_BLK_TO_BYTES(map.m_len);
-		loff_t bytes_available_in_map =
-			mapped_bytes_total - offset_in_first_block;
-		bytes_available_in_map = max(0LL, bytes_available_in_map);
-		iomap->length = min(length, bytes_available_in_map);
-	} else {
-		// No blocks mapped (e.g., ENOSPC on the very first block)
-		iomap->length = 0;
-		if (!err) // If map_blocks returned 0 but mapped 0 blocks, it's odd.
-			f2fs_warn(sbi,"%s: f2fs_map_blocks returned 0 blocks for ino=%lu, lblk=%llu",__func__, inode->i_ino,(unsigned long long)map.m_lblk);
-		// If err was -ENOSPC, returning 0 length is okay, caller handles ENOSPC later.
-	}
-	if (inode_needs_sync(inode) || pos + iomap->length > i_size_read(inode))
-		iomap->flags |= IOMAP_F_DIRTY;
+	err = f2fs_set_iomap(inode,&map,iomap,flags,offset,length,false);
+	if(err)
+		return err;
+failed:
+	f2fs_write_failed(inode,offset + length);
 out:
-	return (err == -ENOSPC) ? 0 : err;
+	return err;
 }
 static int f2fs_buffered_write_atomic_iomap_begin(struct inode *inode,
 						  loff_t pos, loff_t length,

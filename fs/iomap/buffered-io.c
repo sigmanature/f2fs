@@ -967,7 +967,7 @@ retry:
 		if (iter->iomap.flags & IOMAP_F_STALE)
 			break;
 		/*my_debug*/
-		printk(KERN_EMERG "iomap_write_iter: folio order %d\n",folio_order(folio));
+		// printk(KERN_EMERG "iomap_write_iter: folio order %d\n",folio_order(folio));
 		/*my_debug*/
 		offset = offset_in_folio(folio, pos);
 		if (bytes > folio_size(folio) - offset)
