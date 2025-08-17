@@ -3818,10 +3818,6 @@ static int f2fs_write_cache_folios(struct address_space *mapping,
 	struct folio *folio = NULL;
 	int err = 0;
 	struct inode *inode = mapping->host;
-	#ifdef CONFIG_F2FS_DIABLE_WB
-	f2fs_err(F2FS_I_SB(inode),"CONFIG_F2FS_DIABLE_WB enable now disable writeback");
-	return 0;
-	#endif
 	u64 pos = 0;
 	u64 end_pos = 0;
 	u64 end_aligned=0;
@@ -3868,9 +3864,6 @@ static int f2fs_write_cache_folios(struct address_space *mapping,
 		if (i_blocks_per_folio(inode, folio) > 1) {
 			if (!fifs) {
 				fifs = f2fs_ifs_alloc(folio, 0,true);
-				#ifdef CONFIG_F2FS_DEBUG_PRINT
-				f2fs_bug_on(F2FS_P_SB(folio),f2fs_folio_private_deferred_unlock(folio));
-				#endif
 				iomap_set_range_dirty(folio, 0, end_pos - pos);
 			}
 		}
@@ -3913,14 +3906,17 @@ static int f2fs_write_cache_folios(struct address_space *mapping,
 				// 	// and cc.rpages might be filled if it was an overwrite.
 				// }
 				folio_get(folio);
-				f2fs_compress_ctx_add_folio(&cc, folio,pos,r_len);
+				loff_t add_len=f2fs_compress_ctx_add_folio(&cc, folio,pos,r_len);
 				if (folio_order(folio)>0&&fifs) {
-					atomic_add(r_len, f2fs_ifs_dirty_bytes_pending_ptr(fifs, folio));
+					atomic_add(add_len, f2fs_ifs_dirty_bytes_pending_ptr(fifs, folio));
 				}
-				// #ifdef CONFIG_F2FS_DEBUG_PRINT
-				// f2fs_err(F2FS_I_SB(inode),"write_cache_folios:after cc add folio:");
-				// FUNC(f2fs_list_folios_cc, &cc);
-				// #endif
+				if(folio_order(folio)==0){
+					f2fs_set_folio_private_deferred_unlock(folio);
+				}
+				#ifdef CONFIG_F2FS_DEBUG_PRINT
+				f2fs_err(F2FS_I_SB(inode),"write_cache_folios:after cc add folio:");
+				FUNC(f2fs_list_folios_cc, &cc);
+				#endif
 			} else {
 				err = f2fs_write_single_data_folio(folio, &submitted, NULL,
 					NULL, wbc, io_type, 0 ,false,false ,pos,pos +r_len);
@@ -3947,7 +3943,7 @@ handle_current_folio_error:
 			// 	folio->index, folio_order(folio));
 			// #endif
 		}
-		else if(folio_test_locked(folio)){
+		else if(folio_test_locked(folio)&&!f2fs_compressed_file(inode)){
 			// not staged,if the folio didn't be locked, unlock it.
 			folio_unlock(folio);
 		}
@@ -4009,10 +4005,6 @@ static int __f2fs_write_data_pages(struct address_space *mapping,
 				   struct writeback_control *wbc,
 				   enum iostat_type io_type)
 {
-	#ifdef CONFIG_F2FS_DISABLE_WB
-	// dump_stack();
-	return 0;
-	#endif
 	struct inode *inode = mapping->host;
 	struct f2fs_sb_info *sbi = F2FS_I_SB(inode);
 	struct blk_plug plug;
@@ -5413,12 +5405,13 @@ static int f2fs_buffered_write_iomap_begin(struct inode *inode, loff_t offset, l
 		loff_t new_offset = offset;
 		size_t poff;
 		size_t plen;
-		pgoff_t start_idx = start_idx_of_cluster(&cc);//Aligned to cluster's start page index
+		pgoff_t start_idx = offset>>PAGE_SHIFT;
+		if(!iomap->offset)
+			start_idx = start_idx_of_cluster(&cc);//Aligned to cluster's start page index
 		pgoff_t end_idx = ((offset+length)>>PAGE_SHIFT)-1;
 		end_idx = end_idx_of_cluster(&cc,end_idx);//Aligned end idx to the last cluster's end
 		loff_t aligned_len=(end_idx-start_idx+1)<<PAGE_SHIFT;
 		#ifdef CONFIG_F2FS_DEBUG_PRINT
-		ssleep(1);
 		f2fs_err(F2FS_I_SB(inode),"current state:offset%d,end_idx%d",offset,end_idx);
 		FUNC(f2fs_check_inode_folios_writeback, inode);
 		#endif // DEBUG
@@ -5437,7 +5430,7 @@ static int f2fs_buffered_write_iomap_begin(struct inode *inode, loff_t offset, l
 			spin_unlock_irqrestore(&fifs->state_lock, flags);
 		}
 		iomap_adjust_read_range(inode,folio,&new_offset,aligned_len,&poff, &plen);
-		end_idx =min(end_idx,folio->index+folio_nr_pages(folio));
+		end_idx =min(end_idx,folio->index+folio_nr_pages(folio)-1);
 		for (int i=cluster_idx(&cc,new_offset>>PAGE_SHIFT)<<cc.log_cluster_size;;)
 		{
     		if (cc.nr_cpages==NULL)
@@ -5449,7 +5442,7 @@ static int f2fs_buffered_write_iomap_begin(struct inode *inode, loff_t offset, l
     		loff_t add_len=min(cc.cluster_size,end_idx-i+1)<<PAGE_SHIFT;
     		do_read_multi_folios(&cc,folio,i<<PAGE_SHIFT,add_len,&bio,0,true);
 			iomap->length+=add_len;
-    		i+=cc.cluster_size;
+    		i+=add_len>>PAGE_SHIFT;
     		if(i>=end_idx||!f2fs_is_compressed_cluster(cc.inode, i))
         		break;
 		}
@@ -5457,7 +5450,7 @@ static int f2fs_buffered_write_iomap_begin(struct inode *inode, loff_t offset, l
 		if(f2fs_cluster_is_partial_full(&cc))
 		{
 			last_cluster_is_partial=true;
-			for (pgoff_t idx = end_idx+1; idx < end_idx_of_cluster(&cc,end_idx); idx++) {
+			for (pgoff_t idx = end_idx+1; idx <=end_idx_of_cluster(&cc,end_idx); idx++) {
 				struct folio *extra_folio = iomap_get_folio(iter, (loff_t)idx << PAGE_SHIFT, PAGE_SIZE);
 				if (IS_ERR(extra_folio)) {
 					f2fs_folio_put(extra_folio,true);
@@ -5760,7 +5753,21 @@ void f2fs_iomap_put_folio(struct inode *inode, loff_t pos, unsigned copied,
 					  pos + copied);
 	}
 unlock_out:
-	folio_unlock(folio);
+	if(folio_test_locked(folio))
+		folio_unlock(folio);
+	if(folio_test_locked(folio))
+	{
+		f2fs_err(F2FS_F_SB(folio),"OMG lock folio");
+	}
 	folio_put(folio);
+	if(folio_test_locked(folio))
+	{
+		f2fs_err(F2FS_F_SB(folio),"wierd lock folio");
+		folio_unlock(folio);
+		if(folio_test_locked(folio))
+		{
+				f2fs_err(F2FS_F_SB(folio),"OMG lock folio");
+		}
+	}
 	f2fs_update_time(F2FS_I_SB(inode), REQ_TIME);
 }

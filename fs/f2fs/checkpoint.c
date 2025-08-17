@@ -1465,7 +1465,7 @@ static int do_checkpoint(struct f2fs_sb_info *sbi, struct cp_control *cpc)
 	struct curseg_info *seg_i = CURSEG_I(sbi, CURSEG_HOT_NODE);
 	u64 kbytes_written;
 	int err;
-
+	f2fs_err(sbi,"before f2fs_sync_meta_pages");
 	/* Flush all the NAT/SIT pages */
 	f2fs_sync_meta_pages(sbi, META, LONG_MAX, FS_CP_META_IO);
 
@@ -1619,6 +1619,7 @@ static int do_checkpoint(struct f2fs_sb_info *sbi, struct cp_control *cpc)
 
 int f2fs_write_checkpoint(struct f2fs_sb_info *sbi, struct cp_control *cpc)
 {
+	f2fs_err(sbi,"in %s",__func__);
 	struct f2fs_checkpoint *ckpt = F2FS_CKPT(sbi);
 	unsigned long long ckpt_ver;
 	int err = 0;
@@ -1690,7 +1691,7 @@ int f2fs_write_checkpoint(struct f2fs_sb_info *sbi, struct cp_control *cpc)
 
 	/* save inmem log status */
 	f2fs_save_inmem_curseg(sbi);
-
+	f2fs_err(sbi,"before do_checkpoint:");
 	err = do_checkpoint(sbi, cpc);
 	if (err) {
 		f2fs_err(sbi, "do_checkpoint failed err:%d, stop checkpoint", err);

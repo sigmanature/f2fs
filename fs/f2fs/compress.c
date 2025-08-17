@@ -1489,7 +1489,7 @@ int f2fs_truncate_partial_cluster(struct inode *inode, u64 from, bool lock)
 	}
 	return 0;
 }
-
+__attribute__((optimize("O0")))
 static int f2fs_write_compressed_pages(struct compress_ctx *cc,
 					int *submitted,
 					struct writeback_control *wbc,
@@ -1653,10 +1653,14 @@ unlock_continue:
 			if(atomic_sub_and_test(PAGE_SIZE,f2fs_ifs_dirty_bytes_pending_ptr(fifs,folio))
 			&&f2fs_folio_private_deferred_unlock(folio))
 			{
-				f2fs_err(F2FS_I_SB(cc->inode),"folio index %d order%dunlock",folio->index,folio_order(folio));
+
 				f2fs_clear_folio_private_deferred_unlock(folio);
 				folio_unlock(folio);
 			}
+			#ifdef CONFIG_F2FS_DEBUG_PRINT
+				f2fs_err(F2FS_I_SB(inode),"%s,after dirty_bytes_pending sub:",__func__);
+				FUNC(f2fs_list_folios_cc, cc);
+				#endif
 		}
 		else{
 			#ifdef CONFIG_F2FS_DEBUG_PRINT

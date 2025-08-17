@@ -135,7 +135,7 @@ int f2fs_update_extension_list(struct f2fs_sb_info *sbi, const char *name,
 	}
 	return 0;
 }
-//__attribute__((optimize("O0")))
+
 static void set_compress_new_inode(struct f2fs_sb_info *sbi, struct inode *dir,
 				struct inode *inode, const unsigned char *name)
 {
@@ -330,7 +330,8 @@ static struct inode *f2fs_new_inode(struct mnt_idmap *idmap,
 	trace_f2fs_new_inode(inode, 0);
 	#ifdef CONFIG_F2FS_IOMAP
 	if(f2fs_should_use_buffered_iomap(inode))
-		mapping_set_large_folios(inode->i_mapping);
+	{}
+		// mapping_set_large_folios(inode->i_mapping);
 	#endif
 	return inode;
 

@@ -638,7 +638,7 @@ make_now:
 		#ifdef CONFIG_F2FS_IOMAP
 		if(f2fs_should_use_buffered_iomap(inode))
 		{
-			mapping_set_large_folios(inode->i_mapping);
+			// mapping_set_large_folios(inode->i_mapping);
 			inode->i_mapping->a_ops = &f2fs_iomap_aops;
 		}
 		else
