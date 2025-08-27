@@ -1619,7 +1619,6 @@ static int do_checkpoint(struct f2fs_sb_info *sbi, struct cp_control *cpc)
 
 int f2fs_write_checkpoint(struct f2fs_sb_info *sbi, struct cp_control *cpc)
 {
-	f2fs_err(sbi,"in %s",__func__);
 	struct f2fs_checkpoint *ckpt = F2FS_CKPT(sbi);
 	unsigned long long ckpt_ver;
 	int err = 0;
@@ -1682,7 +1681,7 @@ int f2fs_write_checkpoint(struct f2fs_sb_info *sbi, struct cp_control *cpc)
 	/* write cached NAT/SIT entries to NAT/SIT area */
 	err = f2fs_flush_nat_entries(sbi, cpc);
 	if (err) {
-		f2fs_err(sbi, "f2fs_flush_nat_entries failed err:%d, stop checkpoint", err);
+
 		f2fs_bug_on(sbi, !f2fs_cp_error(sbi));
 		goto stop;
 	}
@@ -1691,10 +1690,8 @@ int f2fs_write_checkpoint(struct f2fs_sb_info *sbi, struct cp_control *cpc)
 
 	/* save inmem log status */
 	f2fs_save_inmem_curseg(sbi);
-	f2fs_err(sbi,"before do_checkpoint:");
 	err = do_checkpoint(sbi, cpc);
 	if (err) {
-		f2fs_err(sbi, "do_checkpoint failed err:%d, stop checkpoint", err);
 		f2fs_bug_on(sbi, !f2fs_cp_error(sbi));
 		f2fs_release_discard_addrs(sbi);
 	} else {
