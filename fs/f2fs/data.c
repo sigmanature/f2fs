@@ -5071,7 +5071,7 @@ int f2fs_set_iomap(struct inode* inode,struct f2fs_map_blocks* map,struct iomap*
 const struct iomap_ops f2fs_iomap_ops = {
 	.iomap_begin = f2fs_iomap_begin,
 };
-
+__attribute__((optimize("O0")))
 static int
 f2fs_buffered_read_iomap_begin(struct inode *inode, loff_t offset,
 			       loff_t length, unsigned int flags,
@@ -5387,25 +5387,22 @@ static int f2fs_buffered_write_iomap_begin(struct inode *inode, loff_t offset, l
 	iomap->private = NULL;
 	iomap->folio_ops = &f2fs_iomap_folio_ops;
 	iomap->flags = 0;
-	#ifdef CONFIG_F2FS_DEBUG_PRINT
-	f2fs_err(F2FS_I_SB(inode),"%s inode i_ino%d",__func__,inode->i_ino);
-	#endif
+	pgoff_t start_idx = offset>>PAGE_SHIFT;
 #ifdef CONFIG_F2FS_FS_COMPRESSION
-	pgoff_t index = offset >> PAGE_SHIFT;
-	struct compress_ctx cc = {
+	if (offset<i_size_read(inode)&&f2fs_compressed_file(inode)&&f2fs_is_compressed_cluster(inode,start_idx)) {
+		struct compress_ctx cc = {
 			.inode = inode,
 			.log_cluster_size = F2FS_I(inode)->i_log_cluster_size,
 			.cluster_size = F2FS_I(inode)->i_cluster_size,
-			.cluster_idx = cluster_i_idx(inode,index),
+			.cluster_idx = cluster_i_idx(inode,start_idx),
 		};
-	if (offset<i_size_read(inode)&&f2fs_compressed_file(inode)&&f2fs_is_compressed_cluster(inode,index)) {
 		length=min_t(loff_t,length,i_size_read(inode)-offset);
 		struct iomap_iter* iter=container_of(iomap,struct iomap_iter,iomap);
 		struct bio*bio=NULL;
 		loff_t new_offset = offset;
 		size_t poff;
 		size_t plen;
-		pgoff_t start_idx = offset>>PAGE_SHIFT;
+
 		if(!iomap->offset)
 			start_idx = start_idx_of_cluster(&cc);//Aligned to cluster's start page index
 		pgoff_t end_idx = ((offset+length)>>PAGE_SHIFT)-1;
@@ -5479,7 +5476,7 @@ static int f2fs_buffered_write_iomap_begin(struct inode *inode, loff_t offset, l
 		}
 			if (last_cluster_is_partial) {
 				// 如果最后一个 cluster 是部分填充的，需要额外检查整个 cluster 的状态
-				pgoff_t cluster_start = cluster_idx(&cc, index)<<cc.log_cluster_size;
+				pgoff_t cluster_start = cluster_idx(&cc, start_idx)<<cc.log_cluster_size;
 				err = f2fs_wait_cluster_uptodate(inode, end_idx+1, cc.cluster_size);
 				if (err) goto out_clean_bias;
 			}
@@ -5568,8 +5565,8 @@ static int f2fs_buffered_write_iomap_begin(struct inode *inode, loff_t offset, l
 	err = f2fs_set_iomap(inode,&map,iomap,flags,offset,length,false);
 	if(err)
 		return err;
-failed:
-	f2fs_write_failed(inode,offset + length);
+// failed:
+	// f2fs_write_failed(inode,offset + length);
 out:
 	return err;
 }
