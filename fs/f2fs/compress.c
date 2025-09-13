@@ -1157,7 +1157,7 @@ static void cancel_cluster_writeback(struct compress_ctx *cc,struct compress_io_
 		num_to_skip = min_t(unsigned int,folio_nr_pages(folio) -
 					  folio_page_idx(folio, cc->rpages[i]),
 				  cc->cluster_size - i);
-		f2fs_clear_folio_private_gcing(folio);
+		folio_clear_f2fs_gcing(folio);
 		struct f2fs_iomap_folio_state *fifs = f2fs_folio_get_private(folio);
 		if (fifs) {
 			atomic_set(f2fs_ifs_dirty_bytes_pending_ptr(fifs,folio),0);
@@ -1199,8 +1199,8 @@ static void set_cluster_dirty(struct compress_ctx *cc)
 		}
 	}
 }
-/*Now we can allocate larger order folio in f2fs_filemap_get_folio
-add fgp_flag to parameter so caller can use it to control folio alloc order*/
+/* Now we can allocate larger order folio in f2fs_filemap_get_folio
+add fgp_flag to parameter so caller can use it to control folio alloc order */
 static int prepare_compress_overwrite(struct compress_ctx *cc,
 		struct page **pagep, pgoff_t index, void **fsdata,fgf_t fgp_flag)
 {
@@ -1653,15 +1653,11 @@ static int f2fs_write_compressed_pages(struct compress_ctx *cc,
 		(*submitted)++;
 unlock_continue:
 		inode_dec_dirty_pages(cc->inode);
-<<<<<<< HEAD
-		folio_unlock(fio.folio);
-=======
 		folio = page_folio(fio.page);
 		struct f2fs_iomap_folio_state *fifs = folio->private;
 		if(folio_order(folio)>0&&fifs)
 		{
-			if(atomic_sub_and_test(PAGE_SIZE,f2fs_ifs_dirty_bytes_pending_ptr(fifs,folio))
-			&&f2fs_folio_private_deferred_unlock(folio))
+			if(f2fs_folio_private_deferred_unlock(folio))
 			{
 
 				f2fs_clear_folio_private_deferred_unlock(folio);
@@ -1678,7 +1674,6 @@ unlock_continue:
 			#endif
 			folio_unlock(folio);
 		}
->>>>>>> ccd05e216afa (f2fs基于iomap支持large_folios)
 	}
 
 	if (fio.compr_blocks)
@@ -1736,16 +1731,9 @@ void f2fs_compress_write_end_io(struct bio *bio, struct folio *folio)
 {
 	struct page *page = &folio->page;
 	struct f2fs_sb_info *sbi = bio->bi_private;
-<<<<<<< HEAD
 	struct compress_io_ctx *cic = folio->private;
 	enum count_type type =
 		WB_DATA_TYPE(folio, f2fs_is_compressed_folio(folio));
-=======
-	struct compress_io_ctx *cic =
-			(struct compress_io_ctx *)page_private(page);
-	enum count_type type = WB_DATA_TYPE(page,
-				f2fs_is_compressed_folio(page_folio(page)));
->>>>>>> ccd05e216afa (f2fs基于iomap支持large_folios)
 	int i;
 
 	if (unlikely(bio->bi_status != BLK_STS_OK))
@@ -1762,20 +1750,13 @@ void f2fs_compress_write_end_io(struct bio *bio, struct folio *folio)
 		#endif
 		return;
 	}
-<<<<<<< HEAD
 
-	page_array_free(sbi, cic->rpages, cic->nr_rpages);
-=======
 	unsigned int num_to_skip = 0;
 	for (i = 0; i < cic->nr_rpages; i += num_to_skip) {
 		if (!cic->rpages[i]) {
-			WARN_ON(!cic->rpages[i]);
-			num_to_skip = 1;
-			continue;
-		}
 		struct folio *folio = page_folio(cic->rpages[i]);
 		struct f2fs_iomap_folio_state *fifs = folio->private;
-		f2fs_clear_folio_private_gcing(folio);
+		folio_clear_f2fs_gcing(folio);
 		num_to_skip = min_t(unsigned int,folio_nr_pages(folio) -folio_page_idx(folio, cic->rpages[i]),cic->nr_rpages - i);
 		if (folio_order(folio)>0&&fifs) {
 			if (atomic_sub_and_test(num_to_skip << PAGE_SHIFT,&fifs->write_bytes_pending))
@@ -1789,14 +1770,12 @@ void f2fs_compress_write_end_io(struct bio *bio, struct folio *folio)
 		}
 	}
 	page_array_free(cic->inode, cic->rpages, cic->nr_rpages);
->>>>>>> ccd05e216afa (f2fs基于iomap支持large_folios)
 	kmem_cache_free(cic_entry_slab, cic);
 }
 #ifdef CONFIG_F2FS_DEBUG_PRINT
 __attribute__((optimize("O0")))
 #endif
 static int f2fs_write_raw_pages(struct compress_ctx *cc, int *submitted_p,
-				struct writeback_control *wbc,
 				enum iostat_type io_type)
 {
 	struct address_space *mapping = cc->inode->i_mapping;
@@ -1857,22 +1836,6 @@ static int f2fs_write_raw_pages(struct compress_ctx *cc, int *submitted_p,
 						   end);
 		struct f2fs_iomap_folio_state *fifs = folio->private;
 		if (ret) {
-<<<<<<< HEAD
-			if (ret == 1) {
-				ret = 0;
-			} else if (ret == -EAGAIN) {
-				ret = 0;
-				/*
-				 * for quota file, just redirty left pages to
-				 * avoid deadlock caused by cluster update race
-				 * from foreground operation.
-				 */
-				if (IS_NOQUOTA(cc->inode))
-					goto out;
-				f2fs_io_schedule_timeout(DEFAULT_IO_TIMEOUT);
-				goto retry_write;
-			}
-=======
 			/*TODO: 暂时不知道怎么处理AOP_WRITEPAGE_ACTIVATE
 			因为 Matthew先生计划移除文件系统的
 			writepage,这样未来pageout将不会再进行脏页写回了*/
@@ -1891,9 +1854,6 @@ static int f2fs_write_raw_pages(struct compress_ctx *cc, int *submitted_p,
 			// 	f2fs_io_schedule_timeout(DEFAULT_IO_TIMEOUT);
 			// 	goto retry_write;
 			// }
-			if(folio_order(folio)>0&&fifs)
-				atomic_set(f2fs_ifs_dirty_bytes_pending_ptr(fifs,folio),0);
->>>>>>> ccd05e216afa (f2fs基于iomap支持large_folios)
 			goto out;
 		}
 		if(folio_order(folio)>0&&fifs){
@@ -1909,7 +1869,6 @@ static int f2fs_write_raw_pages(struct compress_ctx *cc, int *submitted_p,
 out:
 	if (compr_blocks > 0)
 		f2fs_unlock_op(sbi);
-	// kfree(origin_folio_orders);
 	f2fs_balance_fs(sbi, true);
 	return ret;
 }
@@ -2299,7 +2258,6 @@ void f2fs_invalidate_compress_pages_range(struct f2fs_sb_info *sbi,
 				 blkaddr + len - 1);
 }
 
-<<<<<<< HEAD
 static void f2fs_cache_compressed_page(struct f2fs_sb_info *sbi,
 		struct folio *folio, nid_t ino, block_t blkaddr)
 {
