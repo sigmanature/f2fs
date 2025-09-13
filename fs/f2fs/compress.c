@@ -1448,14 +1448,9 @@ int f2fs_truncate_partial_cluster(struct inode *inode, u64 from, bool lock)
 	struct page *pagep;
 	struct page **rpages;
 	int log_cluster_size = F2FS_I(inode)->i_log_cluster_size;
-<<<<<<< HEAD
 	pgoff_t start_idx = from >> (PAGE_SHIFT + log_cluster_size) <<
 							log_cluster_size;
 	int i;
-=======
-	pgoff_t start_idx = from >> (PAGE_SHIFT + log_cluster_size)
-					    << log_cluster_size;
->>>>>>> ccd05e216afa (f2fs基于iomap支持large_folios)
 	int err;
 
 	err = f2fs_is_compressed_cluster(inode, start_idx);
@@ -2307,10 +2302,6 @@ void f2fs_invalidate_compress_pages_range(struct f2fs_sb_info *sbi,
 <<<<<<< HEAD
 static void f2fs_cache_compressed_page(struct f2fs_sb_info *sbi,
 		struct folio *folio, nid_t ino, block_t blkaddr)
-=======
-void f2fs_cache_compressed_page(struct f2fs_sb_info *sbi, struct page *page,
-				nid_t ino, block_t blkaddr)
->>>>>>> ccd05e216afa (f2fs基于iomap支持large_folios)
 {
 	struct folio *cfolio;
 	int ret;
