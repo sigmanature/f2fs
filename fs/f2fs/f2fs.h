@@ -28,7 +28,7 @@
 #include <linux/fscrypt.h>
 #include <linux/fsverity.h>
 #include <linux/iomap.h>
-
+#include <trace/events/f2fs.h>
 #ifdef CONFIG_F2FS_IOMAP_FOLIO_STATE
 #include "f2fs_ifs.h"
 #endif
@@ -2841,25 +2841,26 @@ static inline void inc_page_count(struct f2fs_sb_info *sbi, int count_type)
 static inline void inc_page_count_multiple(struct f2fs_sb_info *sbi, int count_type,int npages)
 {
 	atomic_add(npages,&sbi->nr_pages[count_type]);
-
-static inline void inc_page_count_multiple(struct f2fs_sb_info *sbi,
-					   int count_type, int npages)
-{
-	atomic_add(npages, &sbi->nr_pages[count_type]);
-
-	if (count_type == F2FS_DIRTY_DENTS || count_type == F2FS_DIRTY_NODES ||
-	    count_type == F2FS_DIRTY_META || count_type == F2FS_DIRTY_QDATA ||
-	    count_type == F2FS_DIRTY_IMETA)
-		set_sbi_flag(sbi, SBI_IS_DIRTY);
 }
 
-static inline void inode_inc_dirty_pages_multiple(struct inode *inode,int npages)
+static inline void inode_inc_dirty_pages_multiple(struct inode *inode, int npages)
 {
-	atomic_add(n, &F2FS_I(inode)->dirty_pages);
-	inc_page_count_multiple(F2FS_I_SB(inode), S_ISDIR(inode->i_mode) ?
-				F2FS_DIRTY_DENTS : F2FS_DIRTY_DATA, npages);
+	struct f2fs_sb_info *sbi = F2FS_I_SB(inode);
+	int type = S_ISDIR(inode->i_mode) ? F2FS_DIRTY_DENTS : F2FS_DIRTY_DATA;
+
+	trace_f2fs_inode_inc_dirty_pages_multiple_enter(
+	inode, type, npages,
+	atomic_read(&F2FS_I(inode)->dirty_pages),
+	atomic_read(&sbi->nr_pages[type]));
+	atomic_add(npages, &F2FS_I(inode)->dirty_pages);
+	inc_page_count_multiple(sbi, type, npages);
+
+	trace_f2fs_inode_inc_dirty_pages_multiple_exit(
+	        inode, type, npages,
+	        atomic_read(&F2FS_I(inode)->dirty_pages),
+	        atomic_read(&sbi->nr_pages[type]));
 	if (IS_NOQUOTA(inode))
-		inc_page_count_multiple(F2FS_I_SB(inode), F2FS_DIRTY_QDATA, npages);
+		inc_page_count_multiple(sbi, F2FS_DIRTY_QDATA, npages);
 }
 
 static inline void inode_inc_dirty_pages(struct inode *inode)
@@ -2884,9 +2885,20 @@ static inline void inode_dec_dirty_pages_multiple(struct inode *inode, npages)
 			!S_ISLNK(inode->i_mode))
 		return;
 
+	struct f2fs_sb_info *sbi = F2FS_I_SB(inode);
+	int type = S_ISDIR(inode->i_mode) ? F2FS_DIRTY_DENTS : F2FS_DIRTY_DATA;
+
+	trace_f2fs_inode_dec_dirty_pages_multiple_enter(
+			inode, type, npages,
+			atomic_read(&F2FS_I(inode)->dirty_pages),
+			atomic_read(&sbi->nr_pages[type]));
 	atomic_sub(npages, &F2FS_I(inode)->dirty_pages);
-	dec_page_count_multiple(F2FS_I_SB(inode), S_ISDIR(inode->i_mode) ?
-				F2FS_DIRTY_DENTS : F2FS_DIRTY_DATA, npages);
+	dec_page_count_multiple(sbi, type, npages);
+
+	trace_f2fs_inode_dec_dirty_pages_multiple_exit(
+			inode, type, npages,
+			atomic_read(&F2FS_I(inode)->dirty_pages),
+			atomic_read(&sbi->nr_pages[type]));
 	if (IS_NOQUOTA(inode))
 		dec_page_count_multiple(F2FS_I_SB(inode), F2FS_DIRTY_QDATA, npages);
 }
