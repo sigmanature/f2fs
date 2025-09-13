@@ -5135,6 +5135,7 @@ static void f2fs_iomap_put_folio(struct inode *inode, loff_t pos,
 					  pos + copied);
 	}
 unlock_out:
+	inode_inc_dirty_pages_multiple(inode, folio_nr_pages(folio));
 	folio_unlock(folio);
 	folio_put(folio);
 	f2fs_update_time(F2FS_I_SB(inode), REQ_TIME);
@@ -5746,19 +5747,19 @@ struct folio* f2fs_iomap_get_folio(struct iomap_iter *iter, loff_t pos,
 		return iomap_get_folio(iter, pos, len);
 }
 
-static void f2fs_iomap_put_folio(struct inode *inode, loff_t pos, unsigned copied,
+static void f2fs_iomap_put_folio(struct inode *inode, loff_t pos, unsigned written,
 			  struct folio *folio)
 {
-	if (!copied)
+	if (!written)
 		goto unlock_out;
 	if (f2fs_is_atomic_file(inode))
 		folio_set_f2fs_atomic(folio);
 
-	if (pos + copied > i_size_read(inode) &&
+	if (pos + written > i_size_read(inode) &&
 	    !f2fs_verity_in_progress(inode)) {
 		if (f2fs_is_atomic_file(inode))
 			f2fs_i_size_write(F2FS_I(inode)->cow_inode,
-					  pos + copied);
+					  pos + written);
 	}
 unlock_out:
 	folio_unlock(folio);

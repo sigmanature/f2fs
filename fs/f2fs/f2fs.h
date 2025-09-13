@@ -2852,31 +2852,48 @@ static inline void inc_page_count_multiple(struct f2fs_sb_info *sbi,
 	    count_type == F2FS_DIRTY_IMETA)
 		set_sbi_flag(sbi, SBI_IS_DIRTY);
 }
+
+static inline void inode_inc_dirty_pages_multiple(struct inode *inode,int npages)
+{
+	atomic_add(n, &F2FS_I(inode)->dirty_pages);
+	inc_page_count_multiple(F2FS_I_SB(inode), S_ISDIR(inode->i_mode) ?
+				F2FS_DIRTY_DENTS : F2FS_DIRTY_DATA, npages);
+	if (IS_NOQUOTA(inode))
+		inc_page_count_multiple(F2FS_I_SB(inode), F2FS_DIRTY_QDATA, npages);
+}
+
 static inline void inode_inc_dirty_pages(struct inode *inode)
 {
-	atomic_inc(&F2FS_I(inode)->dirty_pages);
-	inc_page_count(F2FS_I_SB(inode), S_ISDIR(inode->i_mode) ?
-				F2FS_DIRTY_DENTS : F2FS_DIRTY_DATA);
-	if (IS_NOQUOTA(inode))
-		inc_page_count(F2FS_I_SB(inode), F2FS_DIRTY_QDATA);
+	inode_inc_dirty_pages_multiple(inode, 1);
+}
+
+static inline void dec_page_count_multiple(struct f2fs_sb_info *sbi,
+					   int count_type, int npages)
+{
+	atomic_sub(npages, &sbi->nr_pages[count_type]);
 }
 
 static inline void dec_page_count(struct f2fs_sb_info *sbi, int count_type)
 {
-	atomic_dec(&sbi->nr_pages[count_type]);
+	dec_page_count_multiple(sbi, 1);
 }
 
-static inline void inode_dec_dirty_pages(struct inode *inode)
+static inline void inode_dec_dirty_pages_multiple(struct inode *inode, npages)
 {
 	if (!S_ISDIR(inode->i_mode) && !S_ISREG(inode->i_mode) &&
 			!S_ISLNK(inode->i_mode))
 		return;
 
-	atomic_dec(&F2FS_I(inode)->dirty_pages);
-	dec_page_count(F2FS_I_SB(inode), S_ISDIR(inode->i_mode) ?
-				F2FS_DIRTY_DENTS : F2FS_DIRTY_DATA);
+	atomic_sub(npages, &F2FS_I(inode)->dirty_pages);
+	dec_page_count_multiple(F2FS_I_SB(inode), S_ISDIR(inode->i_mode) ?
+				F2FS_DIRTY_DENTS : F2FS_DIRTY_DATA, npages);
 	if (IS_NOQUOTA(inode))
-		dec_page_count(F2FS_I_SB(inode), F2FS_DIRTY_QDATA);
+		dec_page_count_multiple(F2FS_I_SB(inode), F2FS_DIRTY_QDATA, npages);
+}
+
+static inline void inode_dec_dirty_pages(struct inode *inode)
+{
+	inode_dec_dirty_pages_multiple(inode, 1);
 }
 
 static inline void inc_atomic_write_cnt(struct inode *inode)

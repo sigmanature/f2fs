@@ -1483,13 +1483,12 @@ static int move_data_page(struct inode *inode, block_t bidx, int gc_type,
 		}
 		folio_set_f2fs_gcing(folio);
 		#ifdef CONFIG_F2FS_IOMAP_FOLIO_STATE
-		if(!folio_test_large(folio))
-		{
+		if(!folio_test_large(folio)) {
 			folio_mark_dirty(folio);
-		}
-		else
-		{
+		} else {
 			f2fs_iomap_set_range_dirty(folio,(bidx-folio->index)<<PAGE_SHIFT,PAGE_SIZE);
+			if(!folio_test_dirty(folio))
+				folio_mark_dirty(folio);
 		}
 		#else
 		folio_mark_dirty(folio);

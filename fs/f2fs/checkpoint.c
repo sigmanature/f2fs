@@ -1043,7 +1043,7 @@ void f2fs_update_dirty_folio(struct inode *inode, struct folio *folio)
 	spin_lock(&sbi->inode_lock[type]);
 	if (type != FILE_INODE || test_opt(sbi, DATA_FLUSH))
 		__add_dirty_inode(inode, type);
-	inode_inc_dirty_pages(inode);
+	inode_inc_dirty_pages_multiple(inode, folio_nr_pages(folio));
 	spin_unlock(&sbi->inode_lock[type]);
 
 	folio_set_f2fs_reference(folio);
