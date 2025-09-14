@@ -75,5 +75,5 @@ void f2fs_ifs_clear_range_uptodate(struct folio *folio,
 				   struct f2fs_iomap_folio_state *fifs,
 				   size_t off, size_t len);
 void f2fs_iomap_set_range_dirty(struct folio *folio, size_t off, size_t len);
-
+unsigned f2fs_iomap_find_dirty_range(struct folio *folio, u64 *range_start,u64 range_end);
 #endif /* F2FS_IFS_H */

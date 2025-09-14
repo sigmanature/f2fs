@@ -28,33 +28,33 @@ static void f2fs_check_inode_folios_writeback(struct inode *inode)
     pgoff_t start = 0;
     pgoff_t end = -1;
     struct f2fs_sb_info *sbi = F2FS_I_SB(inode);
-    
+
     XA_STATE(xas, &mapping->i_pages, start);
-    
+
     rcu_read_lock();
     xas_for_each(&xas, folio, end) {
         if (!xa_is_value(folio)) {
             if (folio_test_writeback(folio)) {
-                f2fs_err(sbi, 
+                f2fs_err(sbi,
                     "Error:inode(%lu): folio %p, index %lu, order %u is in writeback state",
-                    inode->i_ino, folio, folio_index(folio), 
+                    inode->i_ino, folio, folio->index,
                     folio_order(folio));
                 // 如果只需要找到第一个就退出，可以在这里加上 break;
             }
             if(folio_test_locked(folio))
             {
-                f2fs_err(sbi, 
+                f2fs_err(sbi,
                     "Error:inode(%lu): folio %p, index %lu, order %u is locked",
-                    inode->i_ino, folio, folio_index(folio), 
+                    inode->i_ino, folio, folio->index,
                     folio_order(folio));
                 ssleep(1);
                 f2fs_bug_on(sbi, 1);
             }
             else
             {
-                f2fs_err(sbi, 
+                f2fs_err(sbi,
                     "inode(%lu): folio %p, index %lu, order %u is not locked",
-                    inode->i_ino, folio, folio_index(folio), 
+                    inode->i_ino, folio, folio->index,
                     folio_order(folio));
             }
         }
@@ -83,7 +83,7 @@ static void print_wbp(struct folio*folio)
     struct inode*inode=folio->mapping->host;
     if(fifs&&folio_order(folio)>0)
     {
-    f2fs_err(F2FS_I_SB(folio->mapping->host),"folio index %lu, order %d, host inode ino %d,write_bytes_pending %u",folio_index(folio), folio_order(folio),inode->i_ino,atomic_read(&fifs->write_bytes_pending));
+    f2fs_err(F2FS_I_SB(folio->mapping->host),"folio index %lu, order %d, host inode ino %d,write_bytes_pending %u",folio->index, folio_order(folio),inode->i_ino,atomic_read(&fifs->write_bytes_pending));
     }
 }
 static void print_rbp(struct folio*folio)
@@ -92,7 +92,7 @@ static void print_rbp(struct folio*folio)
     struct inode*inode=folio->mapping->host;
     if(fifs&&folio_order(folio)>0)
     {
-        f2fs_err(F2FS_I_SB(inode),"folio index %lu, order %d, host inode ino %d,rbp %d rbp minus magic %u",folio_index(folio), folio_order(folio),inode->i_ino,fifs->read_bytes_pending,fifs->read_bytes_pending-F2FS_IFS_MAGIC);
+        f2fs_err(F2FS_I_SB(inode),"folio index %lu, order %d, host inode ino %d,rbp %d rbp minus magic %u",folio->index, folio_order(folio),inode->i_ino,fifs->read_bytes_pending,fifs->read_bytes_pending-F2FS_IFS_MAGIC);
     }
 }
 static void f2fs_list_folios_bio(struct bio *bio)
@@ -113,7 +113,7 @@ static void f2fs_list_folios_bio(struct bio *bio)
         if (fifs&&folio_order(folio)>0) {
             f2fs_err(F2FS_I_SB(folio->mapping->host),
                 "in bio %p,folio %p, index %lu, order %d, host inode ino %d, fi.length:%d,write_bytes_pending %u",
-                bio,folio, folio_index(folio), folio_order(folio),
+                bio,folio, folio->index, folio_order(folio),
                 folio->mapping->host->i_ino,fi.length,
                 atomic_read(&fifs->write_bytes_pending));
         }
@@ -121,7 +121,7 @@ static void f2fs_list_folios_bio(struct bio *bio)
         {
             f2fs_err(F2FS_I_SB(folio->mapping->host),
                 "in bio %p,folio %p, index %lu, order %d, host inode ino %d, fi.length:%d",
-                bio,folio, folio_index(folio), folio_order(folio),
+                bio,folio, folio->index, folio_order(folio),
                 folio->mapping->host->i_ino,fi.length);
         }
     }
@@ -130,12 +130,12 @@ static void noinline print_folio(struct folio *folio)
 {
     struct inode *inode = folio->mapping->host;
     pr_err("folio %p, index %lu, order %d, host inode ino %d",
-             folio, folio_index(folio), folio_order(folio), inode->i_ino);
+             folio, folio->index, folio_order(folio), inode->i_ino);
 }
 static void noinline print_folio_mapping(struct folio *folio)
 {
     pr_err("folio %p, index %lu, order %d, host mapping %p",
-             folio, folio_index(folio), folio_order(folio), folio->mapping);
+             folio, folio->index, folio_order(folio), folio->mapping);
 }
 static void noinline dump_no_lock_or_null_mapping(struct folio *folio)
 {
@@ -168,11 +168,6 @@ static void inline f2fs_list_folios_cc(struct compress_ctx *cc)
         #endif
         f2fs_err(F2FS_I_SB(cc->inode),"folio_page_idx:%d",folio_page_idx(folio, cc->rpages[i]));
         struct f2fs_iomap_folio_state *fifs = folio->private;
-        if(folio_order(folio) > 0 && fifs) {
-            f2fs_err(F2FS_I_SB(cc->inode),
-            "folio dirty_bytes_pending%d:",atomic_read(f2fs_ifs_dirty_bytes_pending_ptr(fifs,folio)));
-        } 
-        
 		/*f2fs_write_raw_pages can have discontinuous cluster,
 		we must count all page that belongs to the same folio to skip here*/
 		while ((i + num_to_skip) < cc->cluster_size && cc->rpages[i + num_to_skip] &&
@@ -202,10 +197,6 @@ static void inline f2fs_list_folios_cic(struct compress_io_ctx *cc)
         print_folio(folio);
         f2fs_err(F2FS_I_SB(cc->inode),"folio_page_idx:%d",folio_page_idx(folio, cc->rpages[i]));
         struct f2fs_iomap_folio_state *fifs = folio->private;
-        if(folio_order(folio) > 0 && fifs) {
-            f2fs_err(F2FS_I_SB(cc->inode),
-            "folio dirty_bytes_pending%d:",atomic_read(f2fs_ifs_dirty_bytes_pending_ptr(fifs,folio)));
-        } 
         print_wbp(folio);
 		/*f2fs_write_raw_pages can have discontinuous cluster,
 		we must count all page that belongs to the same folio to skip here*/
@@ -223,52 +214,52 @@ static void f2fs_ifs_print_uptodate_status(struct folio *folio)
     unsigned int nr_blocks;
     unsigned long flags;
     int i;
-    
+
     if (!folio || !folio->mapping) {
         printk(KERN_EMERG "f2fs_ifs: folio or mapping is NULL\n");
         return;
     }
-    
+
     inode = folio->mapping->host;
     if (!inode) {
         printk(KERN_EMERG "f2fs_ifs: inode is NULL\n");
         return;
     }
-    
+
     if (!folio_test_private(folio)) {
-        printk(KERN_EMERG "f2fs_ifs: folio order=%u has no private data\n", 
+        printk(KERN_EMERG "f2fs_ifs: folio order=%u has no private data\n",
                folio_order(folio));
         return;
     }
-    
+
     // Check if it's using direct flags
     if (test_bit(PAGE_PRIVATE_NOT_POINTER, (unsigned long *)&folio->private)) {
         printk(KERN_EMERG "f2fs_ifs: folio order=%u using direct flags, uptodate=%s\n",
                folio_order(folio), folio_test_uptodate(folio) ? "true" : "false");
         return;
     }
-    
+
     fifs = (struct f2fs_iomap_folio_state *)folio->private;
     if (!fifs) {
         printk(KERN_EMERG "f2fs_ifs: fifs is NULL\n");
         return;
     }
-    
+
     // Check magic number
     if (READ_ONCE(fifs->read_bytes_pending) != F2FS_IFS_MAGIC) {
-        printk(KERN_EMERG "f2fs_ifs: not f2fs ifs (magic=0x%x)\n", 
+        printk(KERN_EMERG "f2fs_ifs: not f2fs ifs (magic=0x%x)\n",
                READ_ONCE(fifs->read_bytes_pending));
         return;
     }
-    
+
     nr_blocks = i_blocks_per_folio(inode, folio);
-    
+
     // Lock to ensure concurrent safety
     spin_lock_irqsave(&fifs->state_lock, flags);
-    
+
     printk(KERN_EMERG "f2fs_ifs: folio order=%u, blocks=%u, uptodate bits: [",
            folio_order(folio), nr_blocks);
-    
+
     // Print uptodate status for each block
     for (i = 0; i < nr_blocks; i++) {
         if (test_bit(i, fifs->state)) {
@@ -280,9 +271,9 @@ static void f2fs_ifs_print_uptodate_status(struct folio *folio)
             printk(KERN_CONT ",");
         }
     }
-    
+
     printk(KERN_CONT "]\n");
-    
+
     spin_unlock_irqrestore(&fifs->state_lock, flags);
 }
 

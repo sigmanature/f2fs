@@ -28,7 +28,6 @@
 #include <linux/fscrypt.h>
 #include <linux/fsverity.h>
 #include <linux/iomap.h>
-#include <trace/events/f2fs.h>
 #ifdef CONFIG_F2FS_IOMAP_FOLIO_STATE
 #include "f2fs_ifs.h"
 #endif
@@ -1644,6 +1643,7 @@ struct decompress_io_ctx {
 	struct work_struct verity_work;	/* work to verify the decompressed pages */
 	struct work_struct free_work;	/* work for late free this structure itself */
 };
+
 struct f2fs_readpage_ctx {
 	struct folio		*cur_folio;
 	bool			cur_folio_in_bio;
@@ -2652,16 +2652,19 @@ F2FS_FOLIO_PRIVATE_GET_FUNC(inline, INLINE_INODE);
 F2FS_FOLIO_PRIVATE_GET_FUNC(gcing, ONGOING_MIGRATION);
 F2FS_FOLIO_PRIVATE_GET_FUNC(atomic, ATOMIC_WRITE);
 F2FS_FOLIO_PRIVATE_GET_FUNC(reference, REF_RESOURCE);
+F2FS_FOLIO_PRIVATE_GET_FUNC(deferred_unlock, DEFERRED_UNLOCK);
 
 F2FS_FOLIO_PRIVATE_SET_FUNC(reference, REF_RESOURCE);
 F2FS_FOLIO_PRIVATE_SET_FUNC(inline, INLINE_INODE);
 F2FS_FOLIO_PRIVATE_SET_FUNC(gcing, ONGOING_MIGRATION);
 F2FS_FOLIO_PRIVATE_SET_FUNC(atomic, ATOMIC_WRITE);
+F2FS_FOLIO_PRIVATE_SET_FUNC(deferred_unlock, DEFERRED_UNLOCK);
 
 F2FS_FOLIO_PRIVATE_CLEAR_FUNC(reference, REF_RESOURCE);
 F2FS_FOLIO_PRIVATE_CLEAR_FUNC(inline, INLINE_INODE);
 F2FS_FOLIO_PRIVATE_CLEAR_FUNC(gcing, ONGOING_MIGRATION);
 F2FS_FOLIO_PRIVATE_CLEAR_FUNC(atomic, ATOMIC_WRITE);
+F2FS_FOLIO_PRIVATE_CLEAR_FUNC(deferred_unlock, DEFERRED_UNLOCK);
 static inline int folio_set_f2fs_data(struct folio *folio, unsigned long data)
 {
 	if (unlikely(!folio->mapping))
@@ -2838,34 +2841,10 @@ static inline void inc_page_count(struct f2fs_sb_info *sbi, int count_type)
 			count_type == F2FS_DIRTY_IMETA)
 		set_sbi_flag(sbi, SBI_IS_DIRTY);
 }
+
 static inline void inc_page_count_multiple(struct f2fs_sb_info *sbi, int count_type,int npages)
 {
 	atomic_add(npages,&sbi->nr_pages[count_type]);
-}
-
-static inline void inode_inc_dirty_pages_multiple(struct inode *inode, int npages)
-{
-	struct f2fs_sb_info *sbi = F2FS_I_SB(inode);
-	int type = S_ISDIR(inode->i_mode) ? F2FS_DIRTY_DENTS : F2FS_DIRTY_DATA;
-
-	trace_f2fs_inode_inc_dirty_pages_multiple_enter(
-	inode, type, npages,
-	atomic_read(&F2FS_I(inode)->dirty_pages),
-	atomic_read(&sbi->nr_pages[type]));
-	atomic_add(npages, &F2FS_I(inode)->dirty_pages);
-	inc_page_count_multiple(sbi, type, npages);
-
-	trace_f2fs_inode_inc_dirty_pages_multiple_exit(
-	        inode, type, npages,
-	        atomic_read(&F2FS_I(inode)->dirty_pages),
-	        atomic_read(&sbi->nr_pages[type]));
-	if (IS_NOQUOTA(inode))
-		inc_page_count_multiple(sbi, F2FS_DIRTY_QDATA, npages);
-}
-
-static inline void inode_inc_dirty_pages(struct inode *inode)
-{
-	inode_inc_dirty_pages_multiple(inode, 1);
 }
 
 static inline void dec_page_count_multiple(struct f2fs_sb_info *sbi,
@@ -2873,13 +2852,30 @@ static inline void dec_page_count_multiple(struct f2fs_sb_info *sbi,
 {
 	atomic_sub(npages, &sbi->nr_pages[count_type]);
 }
-
-static inline void dec_page_count(struct f2fs_sb_info *sbi, int count_type)
+#ifdef CONFIG_TRACEPOINTS
+#include <trace/events/f2fs.h>
+static inline void inode_inc_dirty_pages_multiple(struct inode *inode, int npages)
 {
-	dec_page_count_multiple(sbi, 1);
+	struct f2fs_sb_info *sbi = F2FS_I_SB(inode);
+	int type = S_ISDIR(inode->i_mode) ? F2FS_DIRTY_DENTS : F2FS_DIRTY_DATA;
+
+	trace_f2fs_inode_inc_dirty_pages_enter(
+	inode, type, npages,
+	atomic_read(&F2FS_I(inode)->dirty_pages),
+	atomic_read(&sbi->nr_pages[type]));
+
+	atomic_add(npages, &F2FS_I(inode)->dirty_pages);
+	inc_page_count_multiple(sbi, type, npages);
+
+	trace_f2fs_inode_inc_dirty_pages_exit(
+	        inode, type, npages,
+	        atomic_read(&F2FS_I(inode)->dirty_pages),
+	        atomic_read(&sbi->nr_pages[type]));
+	if (IS_NOQUOTA(inode))
+		inc_page_count_multiple(sbi, F2FS_DIRTY_QDATA, npages);
 }
 
-static inline void inode_dec_dirty_pages_multiple(struct inode *inode, npages)
+static inline void inode_dec_dirty_pages_multiple(struct inode *inode, int npages)
 {
 	if (!S_ISDIR(inode->i_mode) && !S_ISREG(inode->i_mode) &&
 			!S_ISLNK(inode->i_mode))
@@ -2888,19 +2884,56 @@ static inline void inode_dec_dirty_pages_multiple(struct inode *inode, npages)
 	struct f2fs_sb_info *sbi = F2FS_I_SB(inode);
 	int type = S_ISDIR(inode->i_mode) ? F2FS_DIRTY_DENTS : F2FS_DIRTY_DATA;
 
-	trace_f2fs_inode_dec_dirty_pages_multiple_enter(
+	trace_f2fs_inode_dec_dirty_pages_enter(
 			inode, type, npages,
 			atomic_read(&F2FS_I(inode)->dirty_pages),
 			atomic_read(&sbi->nr_pages[type]));
 	atomic_sub(npages, &F2FS_I(inode)->dirty_pages);
 	dec_page_count_multiple(sbi, type, npages);
 
-	trace_f2fs_inode_dec_dirty_pages_multiple_exit(
+	trace_f2fs_inode_dec_dirty_pages_exit(
 			inode, type, npages,
 			atomic_read(&F2FS_I(inode)->dirty_pages),
 			atomic_read(&sbi->nr_pages[type]));
 	if (IS_NOQUOTA(inode))
 		dec_page_count_multiple(F2FS_I_SB(inode), F2FS_DIRTY_QDATA, npages);
+}
+#else
+static inline void inode_inc_dirty_pages_multiple(struct inode *inode, int npages)
+{
+	struct f2fs_sb_info *sbi = F2FS_I_SB(inode);
+	int type = S_ISDIR(inode->i_mode) ? F2FS_DIRTY_DENTS : F2FS_DIRTY_DATA;
+
+	atomic_add(npages, &F2FS_I(inode)->dirty_pages);
+	inc_page_count_multiple(sbi, type, npages);
+	if (IS_NOQUOTA(inode))
+		inc_page_count_multiple(sbi, F2FS_DIRTY_QDATA, npages);
+}
+
+static inline void inode_dec_dirty_pages_multiple(struct inode *inode, int npages)
+{
+	if (!S_ISDIR(inode->i_mode) && !S_ISREG(inode->i_mode) &&
+			!S_ISLNK(inode->i_mode))
+		return;
+
+	struct f2fs_sb_info *sbi = F2FS_I_SB(inode);
+	int type = S_ISDIR(inode->i_mode) ? F2FS_DIRTY_DENTS : F2FS_DIRTY_DATA;
+
+	atomic_sub(npages, &F2FS_I(inode)->dirty_pages);
+	dec_page_count_multiple(sbi, type, npages);
+	if (IS_NOQUOTA(inode))
+		dec_page_count_multiple(F2FS_I_SB(inode), F2FS_DIRTY_QDATA, npages);
+}
+#endif
+
+static inline void inode_inc_dirty_pages(struct inode *inode)
+{
+	inode_inc_dirty_pages_multiple(inode, 1);
+}
+
+static inline void dec_page_count(struct f2fs_sb_info *sbi, int count_type)
+{
+	dec_page_count_multiple(sbi, count_type, 1);
 }
 
 static inline void inode_dec_dirty_pages(struct inode *inode)
@@ -3958,6 +3991,7 @@ static inline void f2fs_iomap_seq_inc(struct inode *inode)
 }
 
 static inline u64 f2fs_iomap_seq_read(struct inode *inode)
+{
 	return atomic64_read(&F2FS_I(inode)->i_iomap_seq);
 }
 #endif
@@ -3967,6 +4001,9 @@ static inline u64 f2fs_iomap_seq_read(struct inode *inode)
  */
 int f2fs_update_extension_list(struct f2fs_sb_info *sbi, const char *name,
 							bool hot, bool set);
+struct dentry *f2fs_get_parent(struct dentry *child);
+int f2fs_get_tmpfile(struct mnt_idmap *idmap, struct inode *dir,
+		     struct inode **new_inode);
 
 /*
  * dir.c
@@ -4319,16 +4356,18 @@ int f2fs_fiemap(struct inode *inode, struct fiemap_extent_info *fieinfo,
 			u64 start, u64 len);
 int f2fs_encrypt_one_page(struct f2fs_io_info *fio);
 bool f2fs_should_update_inplace(struct inode *inode, struct f2fs_io_info *fio);
+bool f2fs_should_update_outplace(struct inode *inode, struct f2fs_io_info *fio);
 int f2fs_write_single_data_page(struct folio *folio, int *submitted,
 				struct bio **bio, sector_t *last_block,
 				struct writeback_control *wbc,
 				enum iostat_type io_type,
+				int compr_blocks, bool allow_balance);
+int f2fs_write_single_data_folio(struct folio *folio, int *submitted_pages_count,
+				struct bio **bio_ptr, sector_t *last_block_ptr,
+				struct writeback_control *wbc,
+				enum iostat_type io_type,int compr_blocks,
+				bool from_compress, bool is_reclaim,
 				u64 start, u64 end);
-int f2fs_write_split_folio_range(struct address_space *mapping,
-					struct writeback_control *wbc,
-					enum iostat_type io_type,
-					pgoff_t start_index,
-					pgoff_t end_index,struct folio *first_folio);
 void f2fs_write_failed(struct inode *inode, loff_t to);
 int f2fs_set_iomap(struct inode *inode, struct f2fs_map_blocks *map,
 		   struct iomap *iomap, unsigned int flags, loff_t offset,
@@ -4341,9 +4380,6 @@ int f2fs_init_post_read_processing(void);
 void f2fs_destroy_post_read_processing(void);
 int f2fs_init_post_read_wq(struct f2fs_sb_info *sbi);
 void f2fs_destroy_post_read_wq(struct f2fs_sb_info *sbi);
-void f2fs_iomap_put_folio(struct inode *inode, loff_t pos, unsigned copied,struct folio *folio);
-struct folio* f2fs_iomap_get_folio(struct iomap_iter *iter, loff_t pos,
-			unsigned len);
 void f2fs_init_readpage_ctx(struct f2fs_readpage_ctx *ctx,struct readahead_control *rac);
 int f2fs_compress_iomap_readahead(struct inode *inode, struct readahead_control *rac);
 int f2fs_do_read_single_folio_iomap(struct iomap_iter *iter,struct f2fs_readpage_ctx *ctx, loff_t pos,loff_t plen, loff_t poff);
@@ -4353,15 +4389,16 @@ int do_read_multi_folios(struct compress_ctx*cc, struct folio *folio, loff_t pos
 				  struct readahead_control *rac,bool for_write);
 void f2fs_iomap_finish_folio_read(struct folio *folio, size_t off,size_t len, int error);
 extern const struct iomap_ops f2fs_iomap_ops;
-extern const struct iomap_folio_ops f2fs_iomap_folio_ops;
+extern const struct iomap_write_ops f2fs_iomap_write_ops;
 extern const struct iomap_ops f2fs_buffered_read_iomap_ops;
 extern const struct iomap_ops f2fs_buffered_write_iomap_ops;
 extern const struct iomap_ops f2fs_buffered_write_atomic_iomap_ops;
+extern const struct iomap_ops f2fs_buffered_write_compressed_iomap_ops;
 extern void iomap_adjust_read_range(struct inode *inode, struct folio *folio,
 		loff_t *pos, loff_t length, size_t *offp, size_t *lenp);
 extern bool iomap_block_needs_zeroing(const struct iomap_iter *iter,
 		loff_t pos);
-extern bool iomap_writepage_handle_eof(struct folio *folio, struct inode *inode,
+extern bool iomap_writeback_handle_eof(struct folio *folio, struct inode *inode,
 		u64 *end_pos);
 extern void iomap_set_range_uptodate(struct folio *folio, size_t off,
 		size_t len);
@@ -4729,9 +4766,14 @@ void f2fs_init_read_extent_tree(struct inode *inode, struct folio *ifolio);
 bool f2fs_lookup_read_extent_cache(struct inode *inode, pgoff_t pgofs,
 			struct extent_info *ei);
 bool f2fs_lookup_read_extent_cache_block(struct inode *inode, pgoff_t index,
+			block_t *blkaddr);
 void f2fs_update_read_extent_cache(struct dnode_of_data *dn);
 void f2fs_update_read_extent_cache_range(struct dnode_of_data *dn,
 			pgoff_t fofs, block_t blkaddr, unsigned int len);
+unsigned int f2fs_shrink_read_extent_tree(struct f2fs_sb_info *sbi,
+			int nr_shrink);
+
+/* block age extent cache ops */
 void f2fs_init_age_extent_tree(struct inode *inode);
 bool f2fs_lookup_age_extent_cache(struct inode *inode, pgoff_t pgofs,
 			struct extent_info *ei);
@@ -4804,7 +4846,7 @@ enum cluster_check_type {
 bool f2fs_is_compressed_folio(struct folio *folio);
 struct folio *f2fs_compress_control_folio(struct folio *folio);
 int f2fs_prepare_compress_overwrite(struct inode *inode,
-			struct page **pagep, pgoff_t index, void **fsdata,fgf_t fgp_flags);
+			struct page **pagep, pgoff_t index, void **fsdata);
 bool f2fs_compress_write_end(struct inode *inode, void *fsdata,
 					pgoff_t index, unsigned copied);
 int f2fs_truncate_partial_cluster(struct inode *inode, u64 from, bool lock);

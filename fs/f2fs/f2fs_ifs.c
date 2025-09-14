@@ -45,7 +45,7 @@ static inline bool is_f2fs_ifs(struct folio *folio)
 
 	return false;
 }
-
+__attribute__((optimize("O0")))
 struct f2fs_iomap_folio_state *f2fs_ifs_alloc(struct folio *folio, gfp_t gfp,
 					      bool force_alloc)
 {
@@ -169,7 +169,7 @@ void folio_detach_f2fs_private(struct folio *folio)
 
 	kfree(fifs);
 }
-
+__attribute__((optimize("O0")))
 struct f2fs_iomap_folio_state *folio_get_f2fs_ifs(struct folio *folio)
 {
 	if (!folio_test_private(folio))
@@ -218,4 +218,19 @@ void f2fs_iomap_set_range_dirty(struct folio *folio, size_t off, size_t len)
 		bitmap_set(fifs->state, first_blk + blks_per_folio, nr_blks);
 		spin_unlock_irqrestore(&fifs->state_lock, flags);
 	}
+}
+
+unsigned f2fs_iomap_find_dirty_range(struct folio *folio, u64 *range_start,
+		u64 range_end)
+{
+	struct inode* inode=folio->mapping->host;
+
+	if(folio_order(folio) == 0)
+	 	return range_end-*range_start;
+	if(f2fs_compressed_file(inode))
+	{
+		/*clamp range end to a cluster's size*/
+		range_end = min(range_end,(i_end_idx_of_cluster(inode,*range_start >> PAGE_SHIFT)+1) << PAGE_SHIFT);
+	}
+	return iomap_find_dirty_range(folio, range_start, range_end);
 }

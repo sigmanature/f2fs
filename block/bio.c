@@ -1605,6 +1605,7 @@ static inline bool bio_remaining_done(struct bio *bio)
  *   using bio_chain().  The ->bi_end_io() function will only be called the
  *   last time.
  **/
+__attribute__((optimize("O0")))
 void bio_endio(struct bio *bio)
 {
 again:

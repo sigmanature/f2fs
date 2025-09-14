@@ -110,18 +110,6 @@ bool f2fs_is_compressed_folio(struct folio *folio)
 	return true;
 }
 
-bool f2fs_is_compressed_folio(struct folio *folio)
-{
-	if(!folio_test_private(folio))
-		return false;
-	if(f2fs_folio_private_nonpointer(folio))
-		return false;
-	if(folio_order(folio)>0) /*compressed folio cunrrent don't support higer order*/
-		return false;
-	f2fs_bug_on(F2FS_P_SB(&folio->page),*((u32*)folio->private)!= F2FS_COMPRESSED_PAGE_MAGIC);
-	return true;
-}
-
 static void f2fs_set_compressed_page(struct page *page, struct inode *inode,
 				     pgoff_t index, void *data)
 {
@@ -1158,9 +1146,8 @@ static void cancel_cluster_writeback(struct compress_ctx *cc,struct compress_io_
 					  folio_page_idx(folio, cc->rpages[i]),
 				  cc->cluster_size - i);
 		folio_clear_f2fs_gcing(folio);
-		struct f2fs_iomap_folio_state *fifs = f2fs_folio_get_private(folio);
+		struct f2fs_iomap_folio_state *fifs = folio_get_f2fs_ifs(folio);
 		if (fifs) {
-			atomic_set(f2fs_ifs_dirty_bytes_pending_ptr(fifs,folio),0);
 			if (atomic_sub_and_test(num_to_skip<< PAGE_SHIFT, &fifs->write_bytes_pending)) {
 
 				folio_end_writeback(folio);
@@ -1199,16 +1186,14 @@ static void set_cluster_dirty(struct compress_ctx *cc)
 		}
 	}
 }
-/* Now we can allocate larger order folio in f2fs_filemap_get_folio
-add fgp_flag to parameter so caller can use it to control folio alloc order */
+
 static int prepare_compress_overwrite(struct compress_ctx *cc,
-		struct page **pagep, pgoff_t index, void **fsdata,fgf_t fgp_flag)
+		struct page **pagep, pgoff_t index, void **fsdata)
 {
 	struct f2fs_sb_info *sbi = F2FS_I_SB(cc->inode);
 	struct address_space *mapping = cc->inode->i_mapping;
 	struct folio *folio;
-	sector_t last_block_in_bio;
-	fgp_flag = FGP_LOCK | FGP_WRITE | FGP_CREAT;
+	fgf_t fgp_flag = FGP_LOCK | FGP_WRITE | FGP_CREAT;
 	pgoff_t start_idx = start_idx_of_cluster(cc);
 	int i, ret;
 
@@ -1406,7 +1391,7 @@ out:
 // 	return ret;
 // }
 int f2fs_prepare_compress_overwrite(struct inode *inode, struct page **pagep,
-				    pgoff_t index, void **fsdata,fgf_t fgp_flag)
+				    pgoff_t index, void **fsdata)
 {
 	struct compress_ctx cc = {
 		.inode = inode,
@@ -1417,7 +1402,7 @@ int f2fs_prepare_compress_overwrite(struct inode *inode, struct page **pagep,
 		.nr_rpages = 0,
 	};
 
-	return prepare_compress_overwrite(&cc, pagep, index, fsdata,fgp_flag);
+	return prepare_compress_overwrite(&cc, pagep, index, fsdata);
 }
 
 bool f2fs_compress_write_end(struct inode *inode, void *fsdata,
@@ -1463,7 +1448,7 @@ int f2fs_truncate_partial_cluster(struct inode *inode, u64 from, bool lock)
 
 	/* truncate compressed cluster */
 	err = f2fs_prepare_compress_overwrite(inode, &pagep,
-						start_idx, &fsdata,0);
+						start_idx, &fsdata);
 
 	/* should not be a normal cluster */
 	f2fs_bug_on(F2FS_I_SB(inode), err == 0);
@@ -1654,26 +1639,14 @@ static int f2fs_write_compressed_pages(struct compress_ctx *cc,
 unlock_continue:
 		inode_dec_dirty_pages(cc->inode);
 		folio = page_folio(fio.page);
-		struct f2fs_iomap_folio_state *fifs = folio->private;
-		if(folio_order(folio)>0&&fifs)
-		{
-			if(f2fs_folio_private_deferred_unlock(folio))
-			{
-
-				f2fs_clear_folio_private_deferred_unlock(folio);
-				folio_unlock(folio);
-			}
-			#ifdef CONFIG_F2FS_DEBUG_PRINT
-				f2fs_err(F2FS_I_SB(inode),"%s,after dirty_bytes_pending sub:",__func__);
-				FUNC(f2fs_list_folios_cc, cc);
-				#endif
-		}
-		else{
-			#ifdef CONFIG_F2FS_DEBUG_PRINT
-			f2fs_err(F2FS_I_SB(cc->inode),"order 0 folio index %d unlock",folio->index);
-			#endif
+		if(folio_test_f2fs_deferred_unlock(folio)) {
+			folio_clear_f2fs_deferred_unlock(folio);
 			folio_unlock(folio);
 		}
+		#ifdef CONFIG_F2FS_DEBUG_PRINT
+		f2fs_err(F2FS_I_SB(inode),"%s,after dirty_bytes_pending sub:",__func__);
+		FUNC(f2fs_list_folios_cc, cc);
+		#endif
 	}
 
 	if (fio.compr_blocks)
@@ -1732,8 +1705,7 @@ void f2fs_compress_write_end_io(struct bio *bio, struct folio *folio)
 	struct page *page = &folio->page;
 	struct f2fs_sb_info *sbi = bio->bi_private;
 	struct compress_io_ctx *cic = folio->private;
-	enum count_type type =
-		WB_DATA_TYPE(folio, f2fs_is_compressed_folio(folio));
+	enum count_type type = WB_DATA_TYPE(folio, f2fs_is_compressed_folio(folio));
 	int i;
 
 	if (unlikely(bio->bi_status != BLK_STS_OK))
@@ -1742,8 +1714,7 @@ void f2fs_compress_write_end_io(struct bio *bio, struct folio *folio)
 	f2fs_compress_free_page(page);
 	dec_page_count(sbi, type);
 
-	if (atomic_dec_return(&cic->pending_pages))
-	{
+	if (atomic_dec_return(&cic->pending_pages)) {
 		#ifdef CONFIG_F2FS_DEBUG_PRINT
 		f2fs_err(sbi, "%s:pending_pages:%d ",
 				__func__, atomic_read(&cic->pending_pages));
@@ -1753,29 +1724,30 @@ void f2fs_compress_write_end_io(struct bio *bio, struct folio *folio)
 
 	unsigned int num_to_skip = 0;
 	for (i = 0; i < cic->nr_rpages; i += num_to_skip) {
-		if (!cic->rpages[i]) {
+		num_to_skip = 1;
+		if (!cic->rpages[i])
+			continue;
 		struct folio *folio = page_folio(cic->rpages[i]);
 		struct f2fs_iomap_folio_state *fifs = folio->private;
 		folio_clear_f2fs_gcing(folio);
 		num_to_skip = min_t(unsigned int,folio_nr_pages(folio) -folio_page_idx(folio, cic->rpages[i]),cic->nr_rpages - i);
 		if (folio_order(folio)>0&&fifs) {
-			if (atomic_sub_and_test(num_to_skip << PAGE_SHIFT,&fifs->write_bytes_pending))
-			{
+			if (atomic_sub_and_test(num_to_skip << PAGE_SHIFT,&fifs->write_bytes_pending)) {
 				folio_end_writeback(folio);
 			}
 		}
-		else
-		{
+		else {
 			folio_end_writeback(folio);
 		}
 	}
-	page_array_free(cic->inode, cic->rpages, cic->nr_rpages);
+	page_array_free(sbi, cic->rpages, cic->nr_rpages);
 	kmem_cache_free(cic_entry_slab, cic);
 }
 #ifdef CONFIG_F2FS_DEBUG_PRINT
 __attribute__((optimize("O0")))
 #endif
 static int f2fs_write_raw_pages(struct compress_ctx *cc, int *submitted_p,
+				struct writeback_control *wbc,
 				enum iostat_type io_type)
 {
 	struct address_space *mapping = cc->inode->i_mapping;
@@ -1785,9 +1757,7 @@ static int f2fs_write_raw_pages(struct compress_ctx *cc, int *submitted_p,
 
 	compr_blocks = f2fs_compressed_blocks(cc);
 	unsigned int num_to_skip = 0;
-	// unsigned int *origin_folio_orders=kmalloc(sizeof(unsigned int)*cc->cluster_size, GFP_NOFS);
-	// if(!origin_folio_orders)
-		// return -ENOMEM;
+
 	for (i = 0; i < cc->cluster_size; i += num_to_skip) {
 		num_to_skip = 1;
 		if (!cc->rpages[i]) {
@@ -1857,9 +1827,9 @@ static int f2fs_write_raw_pages(struct compress_ctx *cc, int *submitted_p,
 			goto out;
 		}
 		if(folio_order(folio)>0&&fifs){
-			if(atomic_sub_and_test(submitted<<PAGE_SHIFT,f2fs_ifs_dirty_bytes_pending_ptr(fifs,folio))&&f2fs_folio_private_deferred_unlock(folio))
+			if(folio_test_f2fs_deferred_unlock(folio))
 			{
-				f2fs_clear_folio_private_deferred_unlock(folio);
+				folio_clear_f2fs_deferred_unlock(folio);
 				folio_unlock(folio);
 			}
 		}
@@ -2113,8 +2083,6 @@ __attribute__((optimize("O0")))
 void f2fs_decompress_end_io(struct decompress_io_ctx *dic, bool failed,
 				bool in_task)
 {
-	int i;
-
 	if (!failed && dic->need_verity) {
 		/*
 		 * Note that to avoid deadlocks, the verity work can't be done

@@ -1907,6 +1907,7 @@ out:
  *
  * Return: The found folio or an ERR_PTR() otherwise.
  */
+__attribute__((optimize("O0")))
 struct folio *__filemap_get_folio(struct address_space *mapping, pgoff_t index,
 		fgf_t fgp_flags, gfp_t gfp)
 {
@@ -1987,7 +1988,7 @@ no_page:
 			if (!folio)
 				continue;
 			// /*my_debug*/
-			// printk(KERN_EMERG "filemap_get_folio: final order %u\n",order);
+			// printk(KERN_EMERG "filemap_get_folio: cur alloc order %u\n",order);
 			// /*my_debug*/
 			/* Init accessed so avoid atomic mark_page_accessed later */
 			if (fgp_flags & FGP_ACCESSED)
@@ -2024,7 +2025,7 @@ no_page:
 		if (folio && (fgp_flags & FGP_FOR_MMAP))
 			folio_unlock(folio);
 	}
-
+	// printk(KERN_EMERG "filemap_get_folio:folio->index %d,order %d",folio->index,folio_order(folio));
 	if (!folio)
 		return ERR_PTR(-ENOENT);
 	/* not an uncached lookup, clear uncached if set */
