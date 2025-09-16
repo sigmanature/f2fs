@@ -2404,6 +2404,67 @@ DEFINE_EVENT(f2fs__rw_end, f2fs_datawrite_end,
 	TP_ARGS(inode, offset, bytes)
 );
 
+#define show_count_type(t)                                           \
+       __print_symbolic(t,                                           \
+               { F2FS_DIRTY_DATA,  "DIRTY_DATA"  },                        \
+               { F2FS_DIRTY_NODES, "DIRTY_NODES" },                        \
+               { F2FS_DIRTY_DENTS, "DIRTY_DENTS" },                        \
+               { F2FS_DIRTY_META,  "DIRTY_META"  },                        \
+               { F2FS_DIRTY_IMETA, "DIRTY_IMETA" },                        \
+               { F2FS_DIRTY_QDATA, "DIRTY_QDATA" })
+
+DECLARE_EVENT_CLASS(f2fs_dirty_pages_class,
+       TP_PROTO(struct inode *inode, int type, int npages,
+                unsigned int dirty_pages, unsigned int sbi_pages),
+       TP_ARGS(inode, type, npages, dirty_pages, sbi_pages),
+
+       TP_STRUCT__entry(
+               __field(ino_t,        ino)
+               __field(int,          type)
+               __field(int,          npages)
+               __field(unsigned int, dirty_pages)
+               __field(unsigned int, sbi_pages)
+       ),
+
+       TP_fast_assign(
+               __entry->ino       = inode->i_ino;
+               __entry->type      = type;
+               __entry->npages    = npages;
+               __entry->dirty_pages = dirty_pages;
+               __entry->sbi_pages = sbi_pages;
+       ),
+
+       TP_printk("ino=%lu npages=%d dirty_pages=%u count_type=%s sbi_pages=%u",
+                 (unsigned long)__entry->ino,
+                 __entry->npages,
+                 __entry->dirty_pages,
+				 show_count_type(__entry->type),
+                 __entry->sbi_pages)
+);
+
+DEFINE_EVENT(f2fs_dirty_pages_class,
+       f2fs_inode_inc_dirty_pages_enter,
+       TP_PROTO(struct inode *inode, int type, int npages,
+                unsigned int dirty_pages, unsigned int sbi_pages),
+       TP_ARGS(inode, type, npages, dirty_pages, sbi_pages));
+
+DEFINE_EVENT(f2fs_dirty_pages_class,
+       f2fs_inode_inc_dirty_pages_exit,
+       TP_PROTO(struct inode *inode, int type, int npages,
+                unsigned int dirty_pages, unsigned int sbi_pages),
+       TP_ARGS(inode, type, npages, dirty_pages, sbi_pages));
+
+DEFINE_EVENT(f2fs_dirty_pages_class,
+       f2fs_inode_dec_dirty_pages_enter,
+       TP_PROTO(struct inode *inode, int type, int npages,
+                unsigned int dirty_pages, unsigned int sbi_pages),
+       TP_ARGS(inode, type, npages, dirty_pages, sbi_pages));
+
+DEFINE_EVENT(f2fs_dirty_pages_class,
+       f2fs_inode_dec_dirty_pages_exit,
+       TP_PROTO(struct inode *inode, int type, int npages,
+                unsigned int dirty_pages, unsigned int sbi_pages),
+       TP_ARGS(inode, type, npages, dirty_pages, sbi_pages));
 #endif /* _TRACE_F2FS_H */
 
  /* This part must be outside protection */
