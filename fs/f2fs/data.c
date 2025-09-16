@@ -5740,7 +5740,7 @@ static void f2fs_iomap_put_folio(struct inode *inode, loff_t pos,
 	if (!copied)
 		goto unlock_out;
 	if (f2fs_is_atomic_file(inode))
-		folio_set_f2fs_atomic(folio);
+		f2fs_set_folio_private_atomic(folio);
 
 	if (pos + copied > i_size_read(inode) &&
 	    !f2fs_verity_in_progress(inode)) {
