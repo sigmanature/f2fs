@@ -2582,6 +2582,18 @@ static inline void inc_page_count(struct f2fs_sb_info *sbi, int count_type)
 			count_type == F2FS_DIRTY_IMETA)
 		set_sbi_flag(sbi, SBI_IS_DIRTY);
 }
+
+static inline void inc_page_count_multiple(struct f2fs_sb_info *sbi, int count_type,int npages)
+{
+	atomic_add(npages,&sbi->nr_pages[count_type]);
+}
+
+static inline void dec_page_count_multiple(struct f2fs_sb_info *sbi,
+					   int count_type, int npages)
+{
+	atomic_sub(npages, &sbi->nr_pages[count_type]);
+}
+
 #ifdef CONFIG_TRACEPOINTS
 #include <trace/events/f2fs.h>
 static inline void inode_inc_dirty_pages_multiple(struct inode *inode, int npages)
@@ -4089,9 +4101,6 @@ int f2fs_init_post_read_processing(void);
 void f2fs_destroy_post_read_processing(void);
 int f2fs_init_post_read_wq(struct f2fs_sb_info *sbi);
 void f2fs_destroy_post_read_wq(struct f2fs_sb_info *sbi);
-void f2fs_iomap_put_folio(struct inode *inode, loff_t pos, unsigned copied,struct folio *folio);
-struct folio* f2fs_iomap_get_folio(struct iomap_iter *iter, loff_t pos,
-			unsigned len);
 void f2fs_init_readpage_ctx(struct f2fs_readpage_ctx *ctx,struct readahead_control *rac);
 int f2fs_compress_iomap_readahead(struct inode *inode, struct readahead_control *rac);
 int f2fs_do_read_single_folio_iomap(struct iomap_iter *iter,struct f2fs_readpage_ctx *ctx, loff_t pos,loff_t plen, loff_t poff);
