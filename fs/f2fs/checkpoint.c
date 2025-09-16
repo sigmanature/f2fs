@@ -1052,7 +1052,7 @@ void f2fs_update_dirty_folio(struct inode *inode, struct folio *folio)
 	inode_inc_dirty_pages(inode);
 	spin_unlock(&sbi->inode_lock[type]);
 
-	f2fs_set_folio_private_reference(folio);
+	// f2fs_set_folio_private_reference(folio);
 }
 
 void f2fs_remove_dirty_inode(struct inode *inode)

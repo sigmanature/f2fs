@@ -2223,7 +2223,7 @@ static bool f2fs_dirty_node_folio(struct address_space *mapping,
 #endif
 	if (filemap_dirty_folio(mapping, folio)) {
 		inc_page_count(F2FS_M_SB(mapping), F2FS_DIRTY_NODES);
-		f2fs_set_folio_private_reference(folio);
+		// f2fs_set_folio_private_reference(folio);
 		return true;
 	}
 	return false;
