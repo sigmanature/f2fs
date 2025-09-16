@@ -5734,37 +5734,23 @@ struct folio* f2fs_iomap_get_folio(struct iomap_iter *iter, loff_t pos,
 	else
 		return iomap_get_folio(iter, pos, len);
 }
-void f2fs_iomap_put_folio(struct inode *inode, loff_t pos, unsigned copied,
-			  struct folio *folio)
+static void f2fs_iomap_put_folio(struct inode *inode, loff_t pos,
+				 unsigned copied, struct folio *folio)
 {
 	if (!copied)
 		goto unlock_out;
 	if (f2fs_is_atomic_file(inode))
-		f2fs_set_folio_private_atomic(folio);
+		folio_set_f2fs_atomic(folio);
 
 	if (pos + copied > i_size_read(inode) &&
 	    !f2fs_verity_in_progress(inode)) {
-		f2fs_i_size_write(inode, pos + copied);
 		if (f2fs_is_atomic_file(inode))
 			f2fs_i_size_write(F2FS_I(inode)->cow_inode,
 					  pos + copied);
 	}
 unlock_out:
-	if(folio_test_locked(folio))
-		folio_unlock(folio);
-	if(folio_test_locked(folio))
-	{
-		f2fs_err(F2FS_F_SB(folio),"OMG lock folio");
-	}
+	inode_inc_dirty_pages_multiple(inode, folio_nr_pages(folio));
+	folio_unlock(folio);
 	folio_put(folio);
-	if(folio_test_locked(folio))
-	{
-		f2fs_err(F2FS_F_SB(folio),"wierd lock folio");
-		folio_unlock(folio);
-		if(folio_test_locked(folio))
-		{
-				f2fs_err(F2FS_F_SB(folio),"OMG lock folio");
-		}
-	}
 	f2fs_update_time(F2FS_I_SB(inode), REQ_TIME);
 }
