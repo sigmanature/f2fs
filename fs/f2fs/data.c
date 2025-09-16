@@ -5713,10 +5713,7 @@ const struct address_space_operations f2fs_iomap_aops = {
 	// .error_remove_page	= generic_error_remove_page,
 	// .swap_activate		= f2fs_iomap_swap_activate,
 };
-const struct iomap_folio_ops f2fs_iomap_folio_ops = {
-	.get_folio = f2fs_iomap_get_folio,
-	.put_folio = f2fs_iomap_put_folio,
-};
+
 struct folio* f2fs_iomap_get_folio(struct iomap_iter *iter, loff_t pos,
 			unsigned len)
 {
@@ -5754,3 +5751,8 @@ unlock_out:
 	folio_put(folio);
 	f2fs_update_time(F2FS_I_SB(inode), REQ_TIME);
 }
+
+const struct iomap_folio_ops f2fs_iomap_folio_ops = {
+	.get_folio = f2fs_iomap_get_folio,
+	.put_folio = f2fs_iomap_put_folio,
+};
