@@ -2650,7 +2650,7 @@ out_err:
 #endif
 #ifdef CONFIG_F2FS_FS_COMPRESSION
 __attribute__((optimize("O0")))
-int f2fs_read_multi_folios(struct compress_ctx *cc, struct bio **bio_ret,
+int f2fs_read_multi_folios(struct compress_ctx *cc, struct bio **bio_ret,unsigned nr_pages,
 			   struct readahead_control *rac, bool for_write)
 {
 	struct inode *inode = cc->inode;
@@ -3808,7 +3808,7 @@ next:
 
 	return ret;
 }
-__attribute__((optimize("O0")))
+
 /*copy from iomap_writepages, but change it to support both normal and compressed file*/
 static int f2fs_write_cache_folios(struct address_space *mapping,
 				   struct writeback_control *wbc,
@@ -3977,6 +3977,7 @@ handle_current_folio_error:
 	ssleep(1);
 	FUNC(f2fs_check_inode_folios_writeback, inode);
 	#endif // DEBUG
+	pr_debug("%s, nwritten: ",__func__,nwritten);
 	return err;
 }
 static inline bool __should_serialize_io(struct inode *inode,
@@ -5274,6 +5275,7 @@ int f2fs_do_read_multi_folios(struct f2fs_readpage_ctx* ctx, loff_t pos,loff_t p
 	struct bio** bio_ret = &ctx->bio;
 	pgoff_t cur_idx = pos >> PAGE_SHIFT;
 	struct readahead_control *rac = ctx->rac;
+	unsigned nr_pages = rac ? readahead_count(rac) : 1;
 	int ret = 0;
 	pgoff_t cluster_ix = cluster_idx(cc,cur_idx);
 	if (cc->cluster_idx == NULL_CLUSTER)
@@ -5283,12 +5285,12 @@ int f2fs_do_read_multi_folios(struct f2fs_readpage_ctx* ctx, loff_t pos,loff_t p
 			return ret;
 	}
 	ctx->cur_folio_in_compress_ctx = true;
-	ret =do_read_multi_folios(cc, folio, pos, plen,bio_ret,rac,false);
+	ret =do_read_multi_folios(cc, folio, pos, plen,bio_ret,nr_pages,rac,false);
 	return ret;
 }
 __attribute__((optimize("O0")))
 int do_read_multi_folios(struct compress_ctx*cc, struct folio *folio, loff_t pos,
-				  loff_t plen, struct bio** bio_ret,
+				  loff_t plen, struct bio** bio_ret,unsigned nr_pages,
 				  struct readahead_control *rac,bool for_write)
 {
 	int ret = 0;
@@ -5309,7 +5311,7 @@ int do_read_multi_folios(struct compress_ctx*cc, struct folio *folio, loff_t pos
 	when a new folio's cluster index change,but flush immediately when cc
 	is full or this is the last folio in rac*/
 	if (f2fs_cluster_is_full(cc) || (rac&&rac->_nr_pages == 0)) {
-		ret = f2fs_read_multi_folios(cc, bio_ret,rac,for_write);
+		ret = f2fs_read_multi_folios(cc, bio_ret,nr_pages,rac,for_write);
 		f2fs_destroy_compress_ctx(cc, false);
 	}
 	return ret;
@@ -5437,7 +5439,7 @@ static int f2fs_buffered_write_iomap_begin(struct inode *inode, loff_t offset, l
 			goto out_unlock;
 			}
     		loff_t add_len=min(cc.cluster_size,end_idx-i+1)<<PAGE_SHIFT;
-    		do_read_multi_folios(&cc,folio,i<<PAGE_SHIFT,add_len,&bio,0,true);
+    		do_read_multi_folios(&cc,folio,i<<PAGE_SHIFT,add_len,&bio,folio_nr_pages(folio),NULL,true);
 			iomap->length+=add_len;
     		i+=add_len>>PAGE_SHIFT;
     		if(i>=end_idx||!f2fs_is_compressed_cluster(cc.inode, i))
