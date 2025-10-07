@@ -2564,7 +2564,8 @@ static int __f2fs_get_compressed_pblks_info(struct inode *inode, pgoff_t cluster
 }
 static int
 f2fs_flush_compress_ctx_read(struct f2fs_compressed_pblks_info *cc_info,
-			     struct compress_ctx *cc, struct bio **bio_ret,struct readahead_control *rac)
+			     struct compress_ctx *cc, struct bio **bio_ret,unsigned nr_pages,
+			     struct readahead_control *rac)
 {
 	struct inode *inode = cc->inode;
 	struct f2fs_sb_info *sbi = F2FS_I_SB(inode);
@@ -2614,7 +2615,7 @@ submit_and_realloc:
 		}
 
 		if (!bio) {
-			bio = f2fs_grab_read_bio(inode, blkaddr, cc->nr_cpages,
+			bio = f2fs_grab_read_bio(inode, blkaddr, nr_pages,
 						 f2fs_ra_op_flags(rac),
 						 cfolio->index, false);
 			if (IS_ERR(bio)) {
@@ -2713,7 +2714,7 @@ int f2fs_read_multi_folios(struct compress_ctx *cc, struct bio **bio_ret,unsigne
 		ret = 0;
 		goto out_put_dnode;
 	}
-	ret = f2fs_flush_compress_ctx_read(&pblks_info, cc, bio_ret, rac);
+	ret = f2fs_flush_compress_ctx_read(&pblks_info, cc, bio_ret,nr_pages, rac);
 
 out_put_dnode:
 	if (!pblks_info.is_from_extent && pblks_info.blk_info.dn.node_folio) {
@@ -3668,7 +3669,7 @@ readd:
 
 				ret2 = f2fs_prepare_compress_overwrite(
 							inode, &pagep,
-							folio->index, &fsdata,0);
+							folio->index, &fsdata);
 				if (ret2 < 0) {
 					ret = ret2;
 					done = 1;
@@ -4336,7 +4337,7 @@ static int f2fs_write_begin(struct file *file, struct address_space *mapping,
 			goto repeat;
 
 		ret = f2fs_prepare_compress_overwrite(inode, &page,
-							index, fsdata,0);
+							index, fsdata);
 		if (ret < 0) {
 			err = ret;
 			goto fail;
@@ -5186,7 +5187,7 @@ static int f2fs_compress_readpage_iter(struct iomap_iter *iter,struct f2fs_readp
 	int ret;
 #ifdef CONFIG_F2FS_FS_COMPRESSION
 	bool is_compressed =
-		f2fs_is_compressed_cluster(inode, pos >> PAGE_SHIFT);
+		f2fs_is_compressed_cluster(inode, pos >> PAGE_SHIFT);// 这个肯定是冗余的查询了
 #endif
 	/* zero post-eof blocks as the page may be mapped */
 	fifs = f2fs_ifs_alloc(folio, iter->flags,false);
@@ -5454,7 +5455,7 @@ static int f2fs_buffered_write_iomap_begin(struct inode *inode, loff_t offset, l
 				if (IS_ERR(extra_folio)) {
 					f2fs_folio_put(extra_folio,true);
 				 }
-				do_read_multi_folios(&cc, extra_folio, (loff_t)idx << PAGE_SHIFT, PAGE_SIZE, &bio, NULL, true);
+				do_read_multi_folios(&cc, extra_folio, (loff_t)idx << PAGE_SHIFT, PAGE_SIZE, &bio, 1,NULL, true);
 			}
 		}
 		if (bio)

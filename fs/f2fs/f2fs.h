@@ -1595,7 +1595,7 @@ struct f2fs_compressed_pblks_info
 	union{
 		struct extent_info ei;
 		struct dnode_of_data dn;
-	}blk_info;
+	} blk_info;
 };
 #define NULL_CLUSTER			((unsigned int)(~0))
 #define MIN_COMPRESS_LOG_SIZE		2
@@ -4106,7 +4106,7 @@ int f2fs_compress_iomap_readahead(struct inode *inode, struct readahead_control 
 int f2fs_do_read_single_folio_iomap(struct iomap_iter *iter,struct f2fs_readpage_ctx *ctx, loff_t pos,loff_t plen, loff_t poff);
 int f2fs_do_read_multi_folios(struct f2fs_readpage_ctx* ctx, loff_t pos,loff_t plen);
 int do_read_multi_folios(struct compress_ctx*cc, struct folio *folio, loff_t pos,
-				  loff_t plen, struct bio** bio_ret,
+				  loff_t plen, struct bio** bio_ret,unsigned nr_pages,
 				  struct readahead_control *rac,bool for_write);
 void f2fs_iomap_finish_folio_read(struct folio *folio, size_t off,size_t len, int error);
 extern const struct iomap_ops f2fs_iomap_ops;
@@ -4563,7 +4563,7 @@ bool f2fs_is_compressed_page(struct page *page);
 bool f2fs_is_compressed_folio(struct folio *folio);
 struct folio *f2fs_compress_control_folio(struct folio *folio);
 int f2fs_prepare_compress_overwrite(struct inode *inode,
-			struct page **pagep, pgoff_t index, void **fsdata,fgf_t fgp_flags);
+			struct page **pagep, pgoff_t index, void **fsdata);
 bool f2fs_compress_write_end(struct inode *inode, void *fsdata,
 					pgoff_t index, unsigned copied);
 int f2fs_truncate_partial_cluster(struct inode *inode, u64 from, bool lock);

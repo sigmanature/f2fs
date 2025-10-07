@@ -1405,7 +1405,7 @@ out:
 }
 
 int f2fs_prepare_compress_overwrite(struct inode *inode, struct page **pagep,
-				    pgoff_t index, void **fsdata,fgf_t fgp_flag)
+				    pgoff_t index, void **fsdata)
 {
 	struct compress_ctx cc = {
 		.inode = inode,
@@ -1416,7 +1416,7 @@ int f2fs_prepare_compress_overwrite(struct inode *inode, struct page **pagep,
 		.nr_rpages = 0,
 	};
 
-	return prepare_compress_overwrite(&cc, pagep, index, fsdata,fgp_flag);
+	return prepare_compress_overwrite(&cc, pagep, index, fsdata);
 }
 
 bool f2fs_compress_write_end(struct inode *inode, void *fsdata,
@@ -1460,7 +1460,7 @@ int f2fs_truncate_partial_cluster(struct inode *inode, u64 from, bool lock)
 
 	/* truncate compressed cluster */
 	err = f2fs_prepare_compress_overwrite(inode, &pagep,
-						start_idx, &fsdata,0);
+						start_idx, &fsdata);
 
 	/* should not be a normal cluster */
 	f2fs_bug_on(F2FS_I_SB(inode), err == 0);
