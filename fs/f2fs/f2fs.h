@@ -1578,25 +1578,32 @@ struct decompress_io_ctx {
 	struct work_struct verity_work;	/* work to verify the decompressed pages */
 	struct work_struct free_work;	/* work for late free this structure itself */
 };
+
+#define MAX_PBLLKS_INFO_SIZE 64
+
+struct f2fs_compressed_pblks_info
+{
+	bool is_from_extent;
+	unsigned int num_pblks;
+	union {
+		block_t blk; /* start physical block address */
+		struct dnode_of_data* dn; /* dnode of data that the cluster belongs to */
+	};
+
+};
 struct f2fs_readpage_ctx {
 	struct folio		*cur_folio;
 	bool			cur_folio_in_bio;
 	struct bio		*bio;
 	struct readahead_control *rac;
-#ifdef CONFIG_F2FS_FS_COMPRESSION
+	unsigned int compressed_clusters;
+	struct f2fs_compressed_pblks_info pblks_arr[MAX_PBLLKS_INFO_SIZE];
+	struct dnode_of_data dn; /* cached dnode of data */
+	bool has_put_dn;
 	struct compress_ctx cc;
 	bool cur_folio_in_compress_ctx;
-#endif
 };
-struct f2fs_compressed_pblks_info
-{
-	bool is_from_extent;
-	unsigned int num_pblks;
-	union{
-		struct extent_info ei;
-		struct dnode_of_data dn;
-	} blk_info;
-};
+
 #define NULL_CLUSTER			((unsigned int)(~0))
 #define MIN_COMPRESS_LOG_SIZE		2
 #define MAX_COMPRESS_LOG_SIZE		8
@@ -4595,8 +4602,10 @@ void f2fs_update_read_extent_tree_range_compressed(struct inode *inode,
 int f2fs_read_multi_pages(struct compress_ctx *cc, struct bio **bio_ret,
 				unsigned nr_pages, sector_t *last_block_in_bio,
 				struct readahead_control *rac, bool for_write);
-int f2fs_read_multi_folios(struct compress_ctx *cc, struct bio **bio_ret,unsigned nr_pages,
-			   struct readahead_control *rac, bool for_write);
+int f2fs_read_multi_folios(struct compress_ctx *cc, struct f2fs_compressed_pblks_info *pblks_info,
+			struct dnode_of_data *dn, struct bio **bio_ret,
+			unsigned nr_pages, struct readahead_control *rac,
+			bool for_write);
 struct decompress_io_ctx *f2fs_alloc_dic(struct compress_ctx *cc);
 void f2fs_decompress_end_io(struct decompress_io_ctx *dic, bool failed,
 				bool in_task);
@@ -4605,6 +4614,7 @@ unsigned int f2fs_cluster_blocks_are_contiguous(struct dnode_of_data *dn,
 						unsigned int ofs_in_node);
 int f2fs_init_compress_ctx(struct compress_ctx *cc);
 void f2fs_destroy_compress_ctx(struct compress_ctx *cc, bool reuse);
+void f2fs_reset_compress_ctx(struct compress_ctx *cc, bool reuse);
 void f2fs_init_compress_info(struct f2fs_sb_info *sbi);
 int f2fs_init_compress_inode(struct f2fs_sb_info *sbi);
 void f2fs_destroy_compress_inode(struct f2fs_sb_info *sbi);

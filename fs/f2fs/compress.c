@@ -209,6 +209,17 @@ void f2fs_destroy_compress_ctx(struct compress_ctx *cc, bool reuse)
 		cc->cluster_idx = NULL_CLUSTER;
 }
 
+void f2fs_reset_compress_ctx(struct compress_ctx *cc, bool reuse)
+{
+	for (int i = 0; i < cc->cluster_size; i++)
+		cc->rpages[i] = NULL;
+	cc->nr_rpages = 0;
+	cc->nr_cpages = 0;
+	cc->valid_nr_cpages = 0;
+	if (!reuse)
+		cc->cluster_idx = NULL_CLUSTER;
+}
+
 void f2fs_compress_ctx_add_page(struct compress_ctx *cc, struct folio *folio)
 {
 	unsigned int cluster_ofs;
@@ -885,10 +896,12 @@ bool f2fs_cluster_is_full(struct compress_ctx *cc)
 {
 	return cc->cluster_size == cc->nr_rpages;
 }
+
 bool f2fs_cluster_is_partial_full(struct compress_ctx *cc)
 {
-	return cc->nr_rpages>0&&cc->nr_rpages<cc->cluster_size;
+	return cc->nr_rpages>0 && cc->nr_rpages<cc->cluster_size;
 }
+
 bool f2fs_cluster_can_merge_page(struct compress_ctx *cc, pgoff_t index)
 {
 	if (f2fs_cluster_is_empty(cc))
@@ -2435,7 +2448,28 @@ void f2fs_destroy_compress_cache(void)
 	kmem_cache_destroy(dic_entry_slab);
 	kmem_cache_destroy(cic_entry_slab);
 }
-/*Add part of folio into compress_ctx*/
+
+
+void f2fs_init_readpage_ctx(struct f2fs_readpage_ctx *ctx,
+			    struct readahead_control *rac)
+{
+	struct inode *inode = rac->mapping->host;
+	ctx->rac = rac;
+	ctx->cur_folio = NULL;
+	ctx->bio = NULL;
+	ctx->cc.log_cluster_size = F2FS_I(inode)->i_log_cluster_size;
+	ctx->cc.cluster_size = 1 << ctx->cc.log_cluster_size;
+	ctx->cc.cluster_idx = NULL_CLUSTER;
+	ctx->cc.rpages = page_array_alloc(inode, ctx->cc.cluster_size);
+	ctx->cc.cpages = NULL;
+	ctx->cc.nr_rpages = 0;
+	ctx->cc.nr_cpages = 0;
+	ctx->cc.inode = inode;
+	set_new_dnode(&ctx->dn, inode, NULL, NULL, 0);
+	ctx->has_put_dn = false;
+}
+
+/* Add part of folio into compress_ctx */
 __attribute__((optimize("O0")))
 loff_t f2fs_compress_ctx_add_folio(struct compress_ctx *cc, struct folio *folio,
 				 loff_t pos, loff_t rlen)
@@ -2443,9 +2477,9 @@ loff_t f2fs_compress_ctx_add_folio(struct compress_ctx *cc, struct folio *folio,
 	unsigned int cluster_ofs;
 	loff_t poff = offset_in_folio(folio, pos);
 	unsigned int idx_in_folio = poff >> PAGE_SHIFT;
-	if (!f2fs_cluster_can_merge_page(cc, folio->index+idx_in_folio))
+	if (!f2fs_cluster_can_merge_page(cc, folio->index + idx_in_folio))
 		f2fs_bug_on(F2FS_I_SB(cc->inode), 1);
-	cluster_ofs = offset_in_cluster(cc, folio->index+idx_in_folio);
+	cluster_ofs = offset_in_cluster(cc, folio->index + idx_in_folio);
 	int num_pages_to_add =
 		min_t(unsigned int,(unsigned int)folio_nr_pages(folio) - idx_in_folio,
 		    cc->cluster_size - cc->nr_rpages);
@@ -2458,6 +2492,7 @@ loff_t f2fs_compress_ctx_add_folio(struct compress_ctx *cc, struct folio *folio,
 	cc->cluster_idx = cluster_idx(cc, folio->index+idx_in_folio);
 	return num_pages_to_add * PAGE_SIZE;
 }
+
 int f2fs_wait_cluster_uptodate(struct inode*inode,pgoff_t start_check_idx,unsigned int cluster_size)
 {
 	int ret =0 ;
