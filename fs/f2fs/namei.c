@@ -215,11 +215,13 @@ static void set_file_temperature(struct f2fs_sb_info *sbi, struct inode *inode,
 	else
 		file_set_hot(inode);
 }
-__attribute__((optimize("O0")))
+
 static struct inode *f2fs_new_inode(struct mnt_idmap *idmap,
 						struct inode *dir, umode_t mode,
 						const char *name)
 {
+	pr_debug("in %s",__func__);
+	f2fs_err(F2FS_I_SB(dir),"in %s",__func__);
 	struct f2fs_sb_info *sbi = F2FS_I_SB(dir);
 	struct f2fs_inode_info *fi;
 	nid_t ino;

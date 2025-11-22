@@ -1855,7 +1855,7 @@ static int balance_dirty_pages(struct bdi_writeback *wb,
 		if (!laptop_mode && nr_dirty > gdtc->bg_thresh &&
 		    !writeback_in_progress(wb))
 			wb_start_background_writeback(wb);
-
+		pr_debug("%s:nr_dirty,dtc->dirty")
 		/*
 		 * If memcg domain is in effect, @dirty should be under
 		 * both global and memcg freerun ceilings.

@@ -3688,7 +3688,6 @@ next:
 	return ret;
 }
 
-__attribute__((optimize("O0")))
 /* copy from iomap_writepages, but change it to support both normal and compressed file */
 static int f2fs_write_cache_folios(struct address_space *mapping,
 				   struct writeback_control *wbc,
@@ -3846,7 +3845,8 @@ handle_current_folio_error:
 	#ifdef CONFIG_F2FS_DEBUG_PRINT
 	ssleep(1);
 	FUNC(f2fs_check_inode_folios_writeback, inode);
-	#endif // DEBUG
+	#endif
+	pr_debug("%s,nwritten:%d",__func__,nwritten);
 	return err;
 }
 static inline bool __should_serialize_io(struct inode *inode,
@@ -3870,7 +3870,6 @@ static inline bool __should_serialize_io(struct inode *inode,
 	return false;
 }
 
-__attribute__((optimize("O0")))
 static int __f2fs_write_data_pages(struct address_space *mapping,
 				   struct writeback_control *wbc,
 				   enum iostat_type io_type)
@@ -3938,7 +3937,7 @@ static int __f2fs_write_data_pages(struct address_space *mapping,
 	blk_start_plug(&plug);
 	if(f2fs_should_use_buffered_iomap(inode))
 	{
-		ret =f2fs_write_cache_folios(mapping, wbc, io_type);
+		ret = f2fs_write_cache_folios(mapping, wbc, io_type);
 	}
 	else
 		ret = f2fs_write_cache_pages(mapping, wbc, io_type);
