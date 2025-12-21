@@ -10,6 +10,7 @@
 #include <linux/vmalloc.h>
 #include <linux/wait.h>
 #include <linux/iomap.h>
+#include <linux/bio.h>
 #define FUNC(func, ...) \
     do { \
         printk(KERN_EMERG "In %s\n", __func__); \
@@ -29,4 +30,41 @@ do {                                                             \
                   (ifs)->read_bytes_pending); \
         } \
     } while (0)
+
+
+static void stat_folios_bio(struct bio *bio)
+{
+	struct folio_iter fi;
+	struct folio *folio;
+	unsigned long first_idx = ULONG_MAX;
+	unsigned long last_idx  = 0;
+	unsigned int folio_cnt  = 0;
+	unsigned int used_vec;
+	unsigned int total_vec;
+	unsigned int waste;
+
+	if (!bio) {
+		pr_debug("bio is NULL, may not alloc");
+		return;
+	}
+
+	bio_for_each_folio_all(fi, bio) {
+		folio = fi.folio;
+		folio_cnt++;
+		if (folio_index(folio) < first_idx)
+			first_idx = folio_index(folio);
+		if (folio_next_index(folio)-1 > last_idx)
+			last_idx = folio_next_index(folio)-1;
+	}
+
+	used_vec  = bio->bi_vcnt;
+	total_vec = bio->bi_max_vecs;
+	waste     = total_vec ?
+		    (total_vec - used_vec) * 100 / total_vec : 0;
+
+	pr_debug("bio %p folio_cnt %u idx [%lu-%lu] "
+		 "bvec %u/%u waste %u%%",
+		 bio, folio_cnt, first_idx, last_idx,
+		 used_vec, total_vec, waste);
+}
 #endif

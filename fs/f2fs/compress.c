@@ -78,7 +78,7 @@ inline pgoff_t cluster_idx(struct compress_ctx *cc, pgoff_t index)
 }
 inline pgoff_t end_idx_of_cluster(struct compress_ctx *cc, pgoff_t index)
 {
-	/*This is the end idx in page index of cluster*/
+	/* This is the end idx in page index of cluster*/
 	return (cluster_idx(cc, index)<<cc->log_cluster_size) + (cc->cluster_size - 1);
 }
 inline pgoff_t cluster_i_idx(struct inode*inode,pgoff_t index)
@@ -1025,7 +1025,9 @@ static int __f2fs_get_cluster_blocks(struct inode *inode,
 
 	return count;
 }
+#if defined(CONFIG_F2FS_DEBUG_PRINT) && !defined(CONFIG_F2FS_PR_DEBUG)
 __attribute__((optimize("O0")))
+#endif
 static int __f2fs_cluster_blocks(struct inode *inode, unsigned int cluster_idx,
 				enum cluster_check_type type)
 {
@@ -1210,124 +1212,7 @@ static void set_cluster_dirty(struct compress_ctx *cc)
 		}
 	}
 }
-// /*Now we can allocate larger order folio in f2fs_filemap_get_folio
-// add fgp_flag to parameter so caller can use it to control folio alloc order*/
-// static int prepare_compress_overwrite(struct compress_ctx *cc,
-// 		struct page **pagep, pgoff_t index, void **fsdata,fgf_t fgp_flag)
-// {
-// 	struct f2fs_sb_info *sbi = F2FS_I_SB(cc->inode);
-// 	struct address_space *mapping = cc->inode->i_mapping;
-// 	struct folio *folio;
-// 	sector_t last_block_in_bio;
-// 	fgp_flag = FGP_LOCK | FGP_WRITE | FGP_CREAT;
-// 	pgoff_t start_idx = start_idx_of_cluster(cc);
-// 	int i, ret;
 
-// retry:
-// 	ret = f2fs_is_compressed_cluster(cc->inode, start_idx);
-// 	if (ret <= 0)
-// 		return ret;
-
-// 	ret = f2fs_init_compress_ctx(cc);
-// 	if (ret)
-// 		return ret;
-// 	#ifdef CONFIG_F2FS_DEBUG_PRINT
-// 	f2fs_err(sbi,"%s:before f2fs_filemap_get_folio");
-// 	FUNC(f2fs_check_inode_folios_writeback,cc->inode);
-// 	#endif
-// 	/* keep folio reference to avoid page reclaim */
-// 	for (i = 0; i < cc->cluster_size; ) {
-// 		folio = f2fs_filemap_get_folio(mapping, start_idx + i,
-// 				fgp_flag, GFP_NOFS);
-// 		if (IS_ERR(folio)) {
-// 			ret = PTR_ERR(folio);
-// 			goto unlock_pages;
-// 		}
-// 		bool needs_read = false;
-// 		pgoff_t idx_in_folio=offset_in_folio(folio,(start_idx+i)<<PAGE_SHIFT)>>PAGE_SHIFT;
-// 		unsigned int num_pages_iter=min_t(unsigned int,folio_nr_pages(folio)-idx_in_folio,cc->cluster_size-i);
-// 		for (; idx_in_folio < num_pages_iter; ++idx_in_folio) {
-
-// 			struct f2fs_iomap_folio_state* fifs=folio->private;
-// 			if (folio_order(folio)>0&&fifs&&!f2fs_ifs_block_is_uptodate(fifs, idx_in_folio)) {
-// 				needs_read = true;
-// 				break;
-// 			}
-// 			else if(!folio_test_uptodate(folio)) {
-// 				needs_read = true;
-// 				break;
-// 			}
-
-// 		}
-// 		if(needs_read)
-// 		{
-// 			f2fs_compress_ctx_add_folio(cc,folio,(folio->index + idx_in_folio) << PAGE_SHIFT,(num_pages_iter-idx_in_folio)<<PAGE_SHIFT);
-// 		}
-// 		else
-// 		{
-// 			folio_put(folio);
-// 		}
-// 		i+=num_pages_iter;
-// 	}
-// 	#ifdef CONFIG_F2FS_DEBUG_PRINT
-// 	f2fs_err(sbi,"%s:after f2fs_filemap_get_folio");
-// 	FUNC(f2fs_check_inode_folios_writeback,cc->inode);
-// 	#endif
-// 	if (!f2fs_cluster_is_empty(cc)) {
-// 		struct bio *bio = NULL;
-
-// 		ret = f2fs_read_multi_folios(cc, &bio,NULL, true);
-// 		f2fs_put_rpages(cc);
-// 		f2fs_destroy_compress_ctx(cc, true);
-// 		if (ret)
-// 			goto out;
-// 		if (bio)
-// 			f2fs_submit_read_bio(sbi, bio, DATA);
-
-// 		ret = f2fs_init_compress_ctx(cc);
-// 		if (ret)
-// 			goto out;
-// 	}
-
-// 	for (i = 0; i < cc->cluster_size; ) {
-// 		f2fs_bug_on(sbi, cc->rpages[i]);
-
-// 		folio = filemap_lock_folio(mapping, start_idx + i);
-// 		if (IS_ERR(folio)) {
-// 			/* folio could be truncated */
-// 			goto release_and_retry;
-// 		}
-
-// 		f2fs_folio_wait_writeback(folio, DATA, true, true);
-// 		pgoff_t idx_in_folio=offset_in_folio(folio,(start_idx+i)<<PAGE_SHIFT)>>PAGE_SHIFT;
-// 		unsigned int num_pages_to_add=min_t(unsigned int,folio_nr_pages(folio)-idx_in_folio,cc->cluster_size-i);
-// 		f2fs_compress_ctx_add_folio(cc, folio,(start_idx + i) >> PAGE_SHIFT,num_pages_to_add<<PAGE_SHIFT);
-
-// 		if (!folio_test_uptodate(folio)) {
-// 			f2fs_handle_page_eio(sbi, folio, DATA);
-// release_and_retry:
-// 			f2fs_put_rpages(cc);
-// 			f2fs_unlock_rpages(cc, i + 1);
-// 			f2fs_destroy_compress_ctx(cc, true);
-// 			goto retry;
-// 		}
-// 		i+=num_pages_to_add;
-// 	}
-
-// 	if (likely(!ret)) {
-// 		*fsdata = cc->rpages;
-// 		*pagep = cc->rpages[offset_in_cluster(cc, index)];
-// 		return cc->cluster_size;
-// 	}
-
-// unlock_pages:
-// 	f2fs_put_rpages(cc);
-// 	f2fs_unlock_rpages(cc, i);
-// 	f2fs_destroy_compress_ctx(cc, true);
-// out:
-// 	return ret;
-// }
-//__attribute__((optimize("O0")))
 static int prepare_compress_overwrite(struct compress_ctx *cc,
 				      struct page **pagep, pgoff_t index,
 				      void **fsdata)
@@ -1503,7 +1388,9 @@ int f2fs_truncate_partial_cluster(struct inode *inode, u64 from, bool lock)
 	}
 	return 0;
 }
+#if defined(CONFIG_F2FS_DEBUG_PRINT) && !defined(CONFIG_F2FS_PR_DEBUG)
 __attribute__((optimize("O0")))
+#endif
 static int f2fs_write_compressed_pages(struct compress_ctx *cc,
 					int *submitted,
 					struct writeback_control *wbc,
@@ -1674,7 +1561,7 @@ unlock_continue:
 			#ifdef CONFIG_F2FS_DEBUG_PRINT
 				f2fs_err(F2FS_I_SB(inode),"%s,after dirty_bytes_pending sub:",__func__);
 				FUNC(f2fs_list_folios_cc, cc);
-				#endif
+			#endif
 		}
 		else{
 			#ifdef CONFIG_F2FS_DEBUG_PRINT
@@ -1783,7 +1670,8 @@ void f2fs_compress_write_end_io(struct bio *bio, struct page *page)
 	page_array_free(cic->inode, cic->rpages, cic->nr_rpages);
 	kmem_cache_free(cic_entry_slab, cic);
 }
-#ifdef CONFIG_F2FS_DEBUG_PRINT
+
+#if defined(CONFIG_F2FS_DEBUG_PRINT) && !defined(CONFIG_F2FS_PR_DEBUG)
 __attribute__((optimize("O0")))
 #endif
 static int f2fs_write_raw_pages(struct compress_ctx *cc, int *submitted_p,
@@ -2123,7 +2011,9 @@ static void f2fs_verify_cluster(struct work_struct *work)
  * This is called when a compressed cluster has been decompressed
  * (or failed to be read and/or decompressed).
  */
+#if defined(CONFIG_F2FS_DEBUG_PRINT) && !defined(CONFIG_F2FS_PR_DEBUG)
 __attribute__((optimize("O0")))
+#endif
 void f2fs_decompress_end_io(struct decompress_io_ctx *dic, bool failed,
 				bool in_task)
 {
@@ -2141,19 +2031,6 @@ void f2fs_decompress_end_io(struct decompress_io_ctx *dic, bool failed,
 		return;
 	}
 
-	/* Update and unlock the cluster's pagecache pages. */
-	// for (i = 0; i < dic->cluster_size; i++) {
-	// 	struct page *rpage = dic->rpages[i];
-
-	// 	if (!rpage)
-	// 		continue;
-
-	// 	if (failed)
-	// 		ClearPageUptodate(rpage);
-	// 	else
-	// 		SetPageUptodate(rpage);
-	// 	unlock_page(rpage);
-	// }
 	int num_to_skip=0;
 	for (int i = 0; i < dic->cluster_size; i+=num_to_skip) {
 		struct folio *folio;
@@ -2166,29 +2043,7 @@ void f2fs_decompress_end_io(struct decompress_io_ctx *dic, bool failed,
 			num_to_skip++;
 		}
 		struct f2fs_iomap_folio_state *fifs=folio->private;
-	// 	if(failed)
-	// 	{
-	// 		if(folio_order(folio)>0&&fifs)
-	// 		{
-	// 			f2fs_ifs_clear_range_uptodate(folio,fifs,0,num_to_skip<<PAGE_SHIFT);
-	// 			folio_clear_uptodate(folio);
-	// 			folio_unlock(folio);
-	// 		}
-	// 		else
-	// 		{
-	// 			folio_clear_uptodate(folio);
-	// 			folio_unlock(folio);
-	// 		}
-	// 	}
-	// 	else
-	// 	{
-	// 		#ifdef CONFIG_F2FS_DEBUG_PRINT
-	// 		f2fs_err(F2FS_I_SB(dic->inode),"from %s:",__func__);
-	// 		#endif
-	// 		f2fs_iomap_finish_folio_read(folio,0,num_to_skip<<PAGE_SHIFT,0);
-	// 	}
-	// }
-	        /* 起始页在 folio 内的偏移，注意这里一定要用 rpages[i] */
+
     loff_t poff = (loff_t)(folio_page_idx(folio,dic->rpages[i])) << PAGE_SHIFT;
     if (failed) {
         if (folio_order(folio) > 0 && fifs) {
@@ -2200,10 +2055,6 @@ void f2fs_decompress_end_io(struct decompress_io_ctx *dic, bool failed,
                 folio_unlock(folio);
             }
         } else {
-			#ifdef CONFIG_F2FS_DEBUG_PRINT
-	        f2fs_err(F2FS_I_SB(dic->inode),"from %s:",__func__);
-			f2fs_err(F2FS_I_SB(dic->inode),"dic:%p",dic);
-	        #endif
             f2fs_iomap_finish_folio_read(folio, poff, num_to_skip << PAGE_SHIFT, 0);
         }
 	}
@@ -2453,6 +2304,7 @@ void f2fs_destroy_compress_cache(void)
 void f2fs_init_readpage_ctx(struct f2fs_readpage_ctx *ctx,
 			    struct readahead_control *rac)
 {
+	memset(ctx, 0, sizeof(*ctx));
 	struct inode *inode = rac->mapping->host;
 	ctx->rac = rac;
 	ctx->cur_folio = NULL;
@@ -2470,7 +2322,9 @@ void f2fs_init_readpage_ctx(struct f2fs_readpage_ctx *ctx,
 }
 
 /* Add part of folio into compress_ctx */
+#if defined(CONFIG_F2FS_DEBUG_PRINT) && !defined(CONFIG_F2FS_PR_DEBUG)
 __attribute__((optimize("O0")))
+#endif
 loff_t f2fs_compress_ctx_add_folio(struct compress_ctx *cc, struct folio *folio,
 				 loff_t pos, loff_t rlen)
 {

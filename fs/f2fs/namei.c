@@ -215,7 +215,9 @@ static void set_file_temperature(struct f2fs_sb_info *sbi, struct inode *inode,
 	else
 		file_set_hot(inode);
 }
+#if defined(CONFIG_F2FS_DEBUG_PRINT) && !defined(CONFIG_F2FS_PR_DEBUG)
 __attribute__((optimize("O0")))
+#endif
 static struct inode *f2fs_new_inode(struct mnt_idmap *idmap,
 						struct inode *dir, umode_t mode,
 						const char *name)

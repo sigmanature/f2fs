@@ -765,7 +765,9 @@ static struct folio *f2fs_get_node_folio_ra(struct folio *parent, int start);
  * f2fs_unlock_op() only if mode is set with ALLOC_NODE.
  */
 #ifdef CONFIG_F2FS_DEBUG_PRINT
+#if defined(CONFIG_F2FS_DEBUG_PRINT) && !defined(CONFIG_F2FS_PR_DEBUG)
 __attribute__((optimize("O0")))
+#endif
 #endif
 int f2fs_get_dnode_of_data(struct dnode_of_data *dn, pgoff_t index, int mode)
 {

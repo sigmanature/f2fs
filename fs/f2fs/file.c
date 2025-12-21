@@ -623,7 +623,9 @@ static int f2fs_file_open(struct inode *inode, struct file *filp)
 	return finish_preallocate_blocks(inode);
 }
 #ifdef CONFIG_F2FS_DEBUG_PRINT
+#if defined(CONFIG_F2FS_DEBUG_PRINT) && !defined(CONFIG_F2FS_PR_DEBUG)
 __attribute__((optimize("O0")))
+#endif
 #endif
 void f2fs_truncate_data_blocks_range(struct dnode_of_data *dn, int count)
 {
@@ -750,7 +752,9 @@ truncate_out:
 	return 0;
 }
 #ifdef CONFIG_F2FS_DEBUG_PRINT
+#if defined(CONFIG_F2FS_DEBUG_PRINT) && !defined(CONFIG_F2FS_PR_DEBUG)
 __attribute__((optimize("O0")))
+#endif
 #endif
 int f2fs_do_truncate_blocks(struct inode *inode, u64 from, bool lock)
 {
@@ -2196,7 +2200,9 @@ static int f2fs_ioc_getversion(struct file *filp, unsigned long arg)
 
 	return put_user(inode->i_generation, (int __user *)arg);
 }
-//__attribute__((optimize("O0")))
+#if defined(CONFIG_F2FS_DEBUG_PRINT) && !defined(CONFIG_F2FS_PR_DEBUG)
+__attribute__((optimize("O0")))
+#endif
 static int f2fs_ioc_start_atomic_write(struct file *filp, bool truncate)
 {
 	struct inode *inode = file_inode(filp);
@@ -4961,7 +4967,9 @@ static ssize_t f2fs_iomap_buffered_write(struct kiocb *iocb, struct iov_iter *i)
 	}
 	return ret;
 }
-//__attribute__((optimize("O0")))
+#if defined(CONFIG_F2FS_DEBUG_PRINT) && !defined(CONFIG_F2FS_PR_DEBUG)
+__attribute__((optimize("O0")))
+#endif
 static ssize_t
 f2fs_buffered_write_iter(struct kiocb *iocb, struct iov_iter *from)
 {
@@ -5139,7 +5147,9 @@ out:
 	trace_f2fs_direct_IO_exit(inode, pos, count, WRITE, ret);
 	return ret;
 }
-//__attribute__((optimize("O0")))
+#if defined(CONFIG_F2FS_DEBUG_PRINT) && !defined(CONFIG_F2FS_PR_DEBUG)
+__attribute__((optimize("O0")))
+#endif
 static ssize_t
 f2fs_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 {

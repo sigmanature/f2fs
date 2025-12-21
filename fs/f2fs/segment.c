@@ -2581,7 +2581,9 @@ static void update_sit_entry(struct f2fs_sb_info *sbi, block_t blkaddr, int del)
 		get_sec_entry(sbi, segno)->valid_blocks += del;
 }
 #ifdef CONFIG_F2FS_DEBUG_PRINT
+#if defined(CONFIG_F2FS_DEBUG_PRINT) && !defined(CONFIG_F2FS_PR_DEBUG)
 __attribute__((optimize("O0")))
+#endif
 #endif
 void f2fs_invalidate_blocks(struct f2fs_sb_info *sbi, block_t addr,
 				unsigned int len)
@@ -3980,7 +3982,7 @@ void f2fs_outplace_write_data(struct dnode_of_data *dn,
 {
 	struct f2fs_sb_info *sbi = fio->sbi;
 	struct f2fs_summary sum;
-	
+
 	f2fs_bug_on(sbi, dn->data_blkaddr == NULL_ADDR);
 	if (fio->io_type == FS_DATA_IO || fio->io_type == FS_CP_DATA_IO)
 		f2fs_update_age_extent_cache(dn);

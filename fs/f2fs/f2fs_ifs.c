@@ -55,7 +55,6 @@ struct f2fs_iomap_folio_state *f2fs_ifs_alloc(struct folio *folio, gfp_t gfp,boo
 			// Non-NULL, not ours -> Allocate, Copy, Replace path
 			total_longs = f2fs_ifs_total_longs(folio);
 			alloc_size = sizeof(*fifs) + total_longs * sizeof(unsigned long);
-
 			fifs = kmalloc(alloc_size, gfp);
 			if (!fifs)
 				return NULL;
@@ -71,10 +70,8 @@ struct f2fs_iomap_folio_state *f2fs_ifs_alloc(struct folio *folio, gfp_t gfp,boo
 			return fifs;
 		}
 	} else {
-		iomap_longs = f2fs_ifs_iomap_longs(folio);
-		total_longs = iomap_longs + 1;
+		total_longs = f2fs_ifs_total_longs(folio);
 		alloc_size = sizeof(*fifs) + total_longs * sizeof(unsigned long);
-
 		fifs = kzalloc(alloc_size, gfp);
 		if (!fifs)
 			return NULL;
@@ -111,23 +108,6 @@ void f2fs_ifs_free(struct folio *folio)
 	if (!fifs)
 		return;
 
-	#ifdef CONFIG_F2FS_DEBUG_PRINT
-		f2fs_err(F2FS_I_SB(folio->mapping->host),"f2fs_ifs_free: %d, read_bytes_pending %x, write_bytes_pending %x",
-			folio_order(folio), READ_ONCE(fifs->read_bytes_pending),
-			atomic_read(&fifs->write_bytes_pending));
-	#endif
-
-	if(is_f2fs_ifs(folio))
-	{
-		WARN_ON_ONCE(READ_ONCE(fifs->read_bytes_pending) != F2FS_IFS_MAGIC);
-		WARN_ON_ONCE(atomic_read(&fifs->write_bytes_pending));
-	}
-	else
-	{
-		WARN_ON_ONCE(READ_ONCE(fifs->read_bytes_pending) != 0);
-		WARN_ON_ONCE(atomic_read(&fifs->write_bytes_pending));
-	}
-
 	kfree(fifs);
 }
 struct f2fs_iomap_folio_state *f2fs_folio_get_private(struct folio *folio)
@@ -150,7 +130,9 @@ struct f2fs_iomap_folio_state *f2fs_folio_get_private(struct folio *folio)
 
     return NULL;
 }
+#if defined(CONFIG_F2FS_DEBUG_PRINT) && !defined(CONFIG_F2FS_PR_DEBUG)
 __attribute__((optimize("O0")))
+#endif
 unsigned f2fs_iomap_find_dirty_range(struct folio *folio, u64 *range_start,
 		u64 range_end)
 {
@@ -161,10 +143,7 @@ unsigned f2fs_iomap_find_dirty_range(struct folio *folio, u64 *range_start,
 	if(f2fs_compressed_file(inode))
 	{
 		/*clamp range end to a cluster's size*/
-		int a=*range_start>>PAGE_SHIFT;
-		int b=cluster_i_idx(inode, a)<<F2FS_I(inode)->i_cluster_size;
-		int c=(F2FS_I(inode)->i_cluster_size - 1);
-		range_end=min(range_end,(i_end_idx_of_cluster(inode,*range_start>>PAGE_SHIFT)+1) << PAGE_SHIFT);
+		range_end= min(range_end,(i_end_idx_of_cluster(inode,*range_start >> PAGE_SHIFT) + 1) << PAGE_SHIFT);
 	}
 	return iomap_find_dirty_range(folio, range_start, range_end);
 }

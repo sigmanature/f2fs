@@ -413,7 +413,11 @@ static int iomap_readpage_iter(struct iomap_iter *iter,
 		gfp_t gfp = mapping_gfp_constraint(folio->mapping, GFP_KERNEL);
 		gfp_t orig_gfp = gfp;
 		unsigned int nr_vecs = DIV_ROUND_UP(length, PAGE_SIZE);
-
+		// printk(KERN_EMERG"iomap_readpage_iter: length=%u\n", length);
+		// if (ctx->bio)
+		// {
+		// 	stat_folios_bio(ctx->bio);
+		// }
 		if (ctx->bio)
 			submit_bio(ctx->bio);
 
@@ -550,7 +554,10 @@ void iomap_readahead(struct readahead_control *rac, const struct iomap_ops *ops)
 
 	while (iomap_iter(&iter, ops) > 0)
 		iter.status = iomap_readahead_iter(&iter, &ctx);
-
+	if (ctx.bio)
+	{
+		stat_folios_bio(ctx.bio);
+	}
 	if (ctx.bio)
 		submit_bio(ctx.bio);
 	if (ctx.cur_folio) {
