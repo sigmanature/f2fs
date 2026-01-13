@@ -10,16 +10,16 @@
 #include <linux/spinlock.h>
 #include <linux/atomic.h> // For atomic_t and bitops
 #include "f2fs.h"
-#define F2FS_IFS_MAGIC 0xf2f5 
+#define F2FS_IFS_MAGIC 0xf2f5
 #define F2FS_IFS_PRIVATE_LONGS 2
 /*
  * F2FS structure for folio private data, mimicking iomap_folio_state layout.
  * F2FS private flags/data are stored in extra space allocated at the end
  */
-struct f2fs_iomap_folio_state {
+struct f2fs_folio_state {
 	spinlock_t state_lock;
 	unsigned int read_bytes_pending;
-	atomic_t write_bytes_pending; 
+	atomic_t write_bytes_pending;
 	/*
 	 * Flexible array member.
 	 * Holds [0...iomap_longs-1] for iomap uptodate/dirty bits.
@@ -28,7 +28,7 @@ struct f2fs_iomap_folio_state {
 	 */
 	unsigned long state[];
 };
-static inline bool f2fs_ifs_block_is_uptodate(struct f2fs_iomap_folio_state *ifs,
+static inline bool f2fs_ifs_block_is_uptodate(struct f2fs_folio_state *ifs,
 		unsigned int block)
 {
 	return test_bit(block, ifs->state);
@@ -46,12 +46,12 @@ static inline size_t f2fs_ifs_total_longs(struct folio *folio)
 }
 
 static inline unsigned long *
-f2fs_ifs_private_flags_ptr(struct f2fs_iomap_folio_state *fifs, struct folio *folio)
+f2fs_ifs_private_flags_ptr(struct f2fs_folio_state *fifs, struct folio *folio)
 {
 	return &fifs->state[f2fs_ifs_iomap_longs(folio)];
 }
 static inline atomic_t *
-f2fs_ifs_dirty_bytes_pending_ptr(struct f2fs_iomap_folio_state *fifs, struct folio *folio)
+f2fs_ifs_dirty_bytes_pending_ptr(struct f2fs_folio_state *fifs, struct folio *folio)
 {
 	// Treat the second private long as an atomic_t
 	return (atomic_t *)&fifs->state[f2fs_ifs_iomap_longs(folio) + 1];
@@ -60,17 +60,17 @@ f2fs_ifs_dirty_bytes_pending_ptr(struct f2fs_iomap_folio_state *fifs, struct fol
 /*Have to set parameter ifs's type to void*
 and have to interpret ifs as f2fs_ifs to acess it's fields because
 we cannot see iomap_folio_state definition*/
-static void ifs_to_f2fs_ifs(void *ifs, struct f2fs_iomap_folio_state *fifs, struct folio *folio)
+static void ifs_to_f2fs_ifs(void *ifs, struct f2fs_folio_state *fifs, struct folio *folio)
 {
-	struct f2fs_iomap_folio_state *src_ifs = (struct f2fs_iomap_folio_state *)ifs;
+	struct f2fs_folio_state *src_ifs = (struct f2fs_folio_state *)ifs;
 	size_t iomap_longs = f2fs_ifs_iomap_longs(folio);
 	fifs->read_bytes_pending = READ_ONCE(src_ifs->read_bytes_pending);
 	atomic_set(&fifs->write_bytes_pending, atomic_read(&src_ifs->write_bytes_pending));
 	memcpy(fifs->state, src_ifs->state, iomap_longs * sizeof(unsigned long));
 }
-struct f2fs_iomap_folio_state *f2fs_ifs_alloc(struct folio *folio, gfp_t gfp,bool force_alloc);
+struct f2fs_folio_state *f2fs_ifs_alloc(struct folio *folio, gfp_t gfp,bool force_alloc);
 void f2fs_ifs_free(struct folio *folio);
-struct f2fs_iomap_folio_state *f2fs_folio_get_private(struct folio *folio);
+struct f2fs_folio_state *f2fs_folio_get_private(struct folio *folio);
 inline unsigned long f2fs_get_folio_private_data(struct folio *folio);
 inline int f2fs_set_folio_private_data(struct folio *folio,unsigned long data);
 inline void f2fs_clear_folio_private_data(struct folio *folio);
@@ -79,19 +79,19 @@ inline void f2fs_clear_folio_private_all(struct folio *folio);
 they store private flag directly in their folio->private field
 as original f2fs page private behaviour*/
 unsigned f2fs_iomap_find_dirty_range(struct folio *folio, u64 *range_start,u64 range_end);
-void f2fs_ifs_clear_range_uptodate(struct folio *folio, struct f2fs_iomap_folio_state*fifs,size_t off, size_t len);
+void f2fs_ifs_clear_range_uptodate(struct folio *folio, struct f2fs_folio_state*fifs,size_t off, size_t len);
 void f2fs_iomap_finish_folio_read(struct folio *folio, size_t off,size_t len, int error);
 static inline bool is_f2fs_ifs(struct folio *folio)
 {
     if (!folio_test_private(folio))
         return false;
-        
+
     // first directly test no pointer flag is set or not
     if (test_bit(PAGE_PRIVATE_NOT_POINTER, (unsigned long *)&folio->private))
         return false;
-        
-    struct f2fs_iomap_folio_state *fifs;
-    fifs = (struct f2fs_iomap_folio_state *)folio->private;
+
+    struct f2fs_folio_state *fifs;
+    fifs = (struct f2fs_folio_state *)folio->private;
     if (!fifs)
         return false;
     if (READ_ONCE(fifs->read_bytes_pending) == F2FS_IFS_MAGIC) {
@@ -110,8 +110,8 @@ static inline bool is_f2fs_ifs(struct folio *folio)
 					(unsigned long *)&folio->private);        \
 		}																	\
 		/* For higher-order folios, use iomap folio state */               \
-		struct f2fs_iomap_folio_state *fifs =                              \
-			(struct f2fs_iomap_folio_state *)folio->private;           \
+		struct f2fs_folio_state *fifs =                              \
+			(struct f2fs_folio_state *)folio->private;           \
 		unsigned long *private_p;                                          \
 		if (unlikely(!fifs || !folio->mapping))                            \
 			return false;                                               \
@@ -140,7 +140,7 @@ static inline bool is_f2fs_ifs(struct folio *folio)
 				(unsigned long *)&folio->private);               \
 			return 0;                                                 \
 		}     															\
-		struct f2fs_iomap_folio_state *fifs =                            \
+		struct f2fs_folio_state *fifs =                            \
 			f2fs_ifs_alloc(folio, GFP_NOFS,true);                         \
 		if(unlikely(!fifs))                                              \
 			return -ENOMEM;                                           \
@@ -171,8 +171,8 @@ static inline bool is_f2fs_ifs(struct folio *folio)
 			return;                                               \
 		}                                                             \
 		/* For higher-order folios, use iomap folio state */         \
-		struct f2fs_iomap_folio_state *fifs =                         \
-			(struct f2fs_iomap_folio_state *)folio->private;      \
+		struct f2fs_folio_state *fifs =                         \
+			(struct f2fs_folio_state *)folio->private;      \
 		unsigned long *private_p;                                     \
 		if (unlikely(!fifs || !folio->mapping))                       \
 			return;                                               \

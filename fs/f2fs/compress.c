@@ -1118,7 +1118,7 @@ static void set_cluster_write_pending(struct compress_ctx *cc)
 		}
 		folio = page_folio(cc->rpages[i]);
 		num_to_skip = min_t(unsigned int,folio_nr_pages(folio) -folio_page_idx(folio, cc->rpages[i]),cc->cluster_size - i);
-		struct f2fs_iomap_folio_state* fifs= folio->private;
+		struct f2fs_folio_state* fifs= folio->private;
 		if(folio_order(folio)>0&&fifs)
 		{
 			atomic_add(num_to_skip<<PAGE_SHIFT, &fifs->write_bytes_pending);
@@ -1171,7 +1171,7 @@ static void cancel_cluster_writeback(struct compress_ctx *cc,struct compress_io_
 					  folio_page_idx(folio, cc->rpages[i]),
 				  cc->cluster_size - i);
 		f2fs_clear_folio_private_gcing(folio);
-		struct f2fs_iomap_folio_state *fifs = f2fs_folio_get_private(folio);
+		struct f2fs_folio_state *fifs = f2fs_folio_get_private(folio);
 		if (fifs) {
 			atomic_set(f2fs_ifs_dirty_bytes_pending_ptr(fifs,folio),0);
 			if (atomic_sub_and_test(num_to_skip<< PAGE_SHIFT, &fifs->write_bytes_pending)) {
@@ -1198,7 +1198,7 @@ static void set_cluster_dirty(struct compress_ctx *cc)
 			continue;
 		}
 		folio = page_folio(cc->rpages[i]);
-		struct f2fs_iomap_folio_state *fifs = folio->private;
+		struct f2fs_folio_state *fifs = folio->private;
 		num_to_skip = min_t(unsigned int,folio_nr_pages(folio) -
 					  folio_page_idx(folio, cc->rpages[i]),
 				  cc->cluster_size - i);
@@ -1548,7 +1548,7 @@ static int f2fs_write_compressed_pages(struct compress_ctx *cc,
 unlock_continue:
 		inode_dec_dirty_pages(cc->inode);
 		folio = page_folio(fio.page);
-		struct f2fs_iomap_folio_state *fifs = folio->private;
+		struct f2fs_folio_state *fifs = folio->private;
 		if(folio_order(folio)>0&&fifs)
 		{
 			if(atomic_sub_and_test(PAGE_SIZE,f2fs_ifs_dirty_bytes_pending_ptr(fifs,folio))
@@ -1653,7 +1653,7 @@ void f2fs_compress_write_end_io(struct bio *bio, struct page *page)
 			continue;
 		}
 		struct folio *folio = page_folio(cic->rpages[i]);
-		struct f2fs_iomap_folio_state *fifs = folio->private;
+		struct f2fs_folio_state *fifs = folio->private;
 		f2fs_clear_folio_private_gcing(folio);
 		num_to_skip = min_t(unsigned int,folio_nr_pages(folio) -folio_page_idx(folio, cic->rpages[i]),cic->nr_rpages - i);
 		if (folio_order(folio)>0&&fifs) {
@@ -1734,7 +1734,7 @@ static int f2fs_write_raw_pages(struct compress_ctx *cc, int *submitted_p,
 						   NULL, wbc, io_type,
 						   compr_blocks, true, false,start,
 						   end);
-		struct f2fs_iomap_folio_state *fifs = folio->private;
+		struct f2fs_folio_state *fifs = folio->private;
 		if (ret) {
 			/*TODO: 暂时不知道怎么处理AOP_WRITEPAGE_ACTIVATE
 			因为 Matthew先生计划移除文件系统的
@@ -2042,7 +2042,7 @@ void f2fs_decompress_end_io(struct decompress_io_ctx *dic, bool failed,
 		       page_folio(dic->rpages[i + num_to_skip]) == folio) {
 			num_to_skip++;
 		}
-		struct f2fs_iomap_folio_state *fifs=folio->private;
+		struct f2fs_folio_state *fifs=folio->private;
 
     loff_t poff = (loff_t)(folio_page_idx(folio,dic->rpages[i])) << PAGE_SHIFT;
     if (failed) {

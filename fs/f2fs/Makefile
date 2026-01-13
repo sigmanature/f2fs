@@ -11,4 +11,4 @@ f2fs-$(CONFIG_F2FS_FS_POSIX_ACL) += acl.o
 f2fs-$(CONFIG_FS_VERITY) += verity.o
 f2fs-$(CONFIG_F2FS_FS_COMPRESSION) += compress.o
 f2fs-$(CONFIG_F2FS_IOSTAT) += iostat.o
-f2fs-$(CONFIG_F2FS_IOMAP_FOLIO_STATE) += f2fs_ifs.o
+f2fs-$(CONFIG_f2fs_folio_state) += f2fs_ifs.o

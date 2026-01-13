@@ -181,7 +181,7 @@ void f2fs_iomap_finish_folio_read(struct folio *folio, size_t off,size_t len, in
 	// 	f2fs_err(F2FS_F_SB(folio),"%s no!!! folio index %d order %d host ino %d is not locked",__func__,folio->index,folio_order(folio),folio_inode(folio)->i_ino);
 	// }
 	// #endif
-	struct f2fs_iomap_folio_state *fifs =folio->private;
+	struct f2fs_folio_state *fifs =folio->private;
 		bool uptodate = !error;
 		bool finished = true;
 		if(folio_order(folio)>0&&fifs) {
@@ -411,7 +411,7 @@ static void f2fs_write_end_io(struct bio *bio)
 		if (f2fs_in_warm_node_list(sbi, folio))
 			f2fs_del_fsync_node_entry(sbi, folio);
 		f2fs_clear_folio_private_gcing(folio);
-		struct f2fs_iomap_folio_state *fifs = folio->private;
+		struct f2fs_folio_state *fifs = folio->private;
 		if (folio_order(folio)>0&&fifs) {
 			// fi.length is the number of bytes from this folio in this bio segment
 			f2fs_bug_on(F2FS_F_SB(folio),atomic_read(&fifs->write_bytes_pending) <=0);
@@ -2639,7 +2639,7 @@ submit_and_realloc:
 		// 			last_block_in_file)
 		// 		{
 		// 			folio_zero_segment(folio,folio_page_idx(folio, page) << PAGE_SHIFT,folio_size(folio)); // Zero this specific page within folio
-		// 			struct f2fs_iomap_folio_state *fifs = folio->private;
+		// 			struct f2fs_folio_state *fifs = folio->private;
 		// 			if (folio_order(folio)>0&&fifs) {
 		// 				iomap_set_range_uptodate(folio,folio_page_idx(folio, page)<< PAGE_SHIFT,folio_size(folio) - (folio_page_idx(folio, page)<< PAGE_SHIFT));
 		// 			} else {
@@ -3451,7 +3451,7 @@ int f2fs_write_single_data_folio(struct folio *folio, int *submitted_pages_count
 	#ifdef CONFIG_F2FS_DEBUG_PRINT
 	f2fs_err(sbi, "f2fs_write_single_data_folio called with folio_order:%d", folio_order(folio));
 	#endif
-	struct f2fs_iomap_folio_state *fifs = folio->private;
+	struct f2fs_folio_state *fifs = folio->private;
 	WARN_ON_ONCE(!fifs);
 	pgoff_t folio_start_idx = (start - folio_pos(folio)) >> PAGE_SHIFT;
 	pgoff_t folio_end_idx = (end - 1 - folio_pos(folio)) >> PAGE_SHIFT;
@@ -3914,7 +3914,7 @@ static int f2fs_write_cache_folios(struct address_space *mapping,
 		clear_inode_flag(mapping->host, FI_HOT_DATA);
 
 	while ((folio = writeback_iter(mapping, wbc, folio, &err))) {
-		struct f2fs_iomap_folio_state *fifs = NULL;
+		struct f2fs_folio_state *fifs = NULL;
 		pos = folio_pos(folio);
 		end_pos = pos + folio_size(folio);
 		if (!iomap_writepage_handle_eof(folio, inode, &end_pos)) {
@@ -4576,7 +4576,7 @@ void f2fs_invalidate_folio(struct folio *folio, size_t offset, size_t length)
 	if (offset == 0 && length == folio_size(folio)) {
 		WARN_ON_ONCE(folio_test_writeback(folio));
 		folio_cancel_dirty(folio);
-		struct f2fs_iomap_folio_state* fifs= folio->private;
+		struct f2fs_folio_state* fifs= folio->private;
 	if (fifs) {
 		f2fs_ifs_free(folio);
 	}
@@ -4589,7 +4589,7 @@ bool f2fs_release_folio(struct folio *folio, gfp_t wait)
 	/* If this is dirty folio, keep private data */
 	if (folio_test_dirty(folio))
 		return false;
-	struct f2fs_iomap_folio_state* fifs= folio->private;
+	struct f2fs_folio_state* fifs= folio->private;
 	if (fifs) {
 		f2fs_ifs_free(folio);
 	}
@@ -5331,7 +5331,7 @@ static int f2fs_compress_readpage_iter(struct iomap_iter *iter,struct f2fs_readp
 	loff_t length = iomap_length(iter);
 	struct folio *folio = ctx->cur_folio;
 	struct inode* inode=folio->mapping->host;
-	struct f2fs_iomap_folio_state *fifs;
+	struct f2fs_folio_state *fifs;
 	size_t poff, plen;
 	int ret;
 
@@ -5431,7 +5431,7 @@ int f2fs_do_read_multi_folios(struct f2fs_readpage_ctx* ctx, loff_t pos,loff_t p
 	struct bio** bio_ret = &ctx->bio;
 	pgoff_t cur_idx = pos >> PAGE_SHIFT;
 	struct readahead_control *rac = ctx->rac;
-	struct f2fs_iomap_folio_state* fifs = folio->private;
+	struct f2fs_folio_state* fifs = folio->private;
 	unsigned int nr_pages = rac ? readahead_count(rac) :
 			folio_nr_pages(folio) - (cur_idx - folio->index);
 	int cluster_size = cc->cluster_size;
@@ -5514,7 +5514,7 @@ int do_read_multi_folios(struct compress_ctx*cc, struct folio *folio, loff_t pos
 {
 	int ret = 0;
 	loff_t add_len = f2fs_compress_ctx_add_folio(cc, folio, pos,plen);
-	struct f2fs_iomap_folio_state* fifs = folio->private;
+	struct f2fs_folio_state* fifs = folio->private;
 	if(folio_order(folio)>0&&fifs) {
 		spin_lock_irq(&fifs->state_lock);
 		fifs->read_bytes_pending += add_len;
@@ -5544,7 +5544,7 @@ int f2fs_do_read_single_folio_iomap(struct iomap_iter *iter,
 	ctx->cur_folio_in_bio = true;
 	struct inode *inode = iter->inode;
 	struct folio *folio = ctx->cur_folio;
-	struct f2fs_iomap_folio_state *fifs = folio->private;
+	struct f2fs_folio_state *fifs = folio->private;
 	if (fifs) {
 		spin_lock_irq(&fifs->state_lock);
 		fifs->read_bytes_pending += plen;
@@ -5649,7 +5649,7 @@ static int f2fs_buffered_write_iomap_begin(struct inode *inode, loff_t offset, l
 			.nr_cpages = 0,
 		};
 		struct folio *folio;
-		struct f2fs_iomap_folio_state *fifs = NULL;
+		struct f2fs_folio_state *fifs = NULL;
 		struct iomap_iter *iter = container_of(iomap, struct iomap_iter, iomap);
 		struct f2fs_sb_info *sbi = F2FS_I_SB(inode);
 		length = min_t(loff_t, length, i_size_read(inode) - offset);
@@ -5727,7 +5727,7 @@ static int f2fs_buffered_write_iomap_begin(struct inode *inode, loff_t offset, l
 				unsigned int n_in_folio;
 				unsigned int cluster_ofs = offset_i_in_cluster(inode, idx);
 				unsigned int blk_off, j;
-				struct f2fs_iomap_folio_state *hfifs;
+				struct f2fs_folio_state *hfifs;
 				if (cc.rpages[cluster_ofs]) {
 					cur_folio = page_folio(cc.rpages[cluster_ofs]);
 				} else {
@@ -5762,9 +5762,9 @@ static int f2fs_buffered_write_iomap_begin(struct inode *inode, loff_t offset, l
 						(loff_t)n_in_folio << PAGE_SHIFT);
 					if (folio_order(cur_folio) > 0 && cur_folio->private) {
 						unsigned long f;
-						spin_lock_irqsave(&((struct f2fs_iomap_folio_state *)cur_folio->private)->state_lock, f);
-						((struct f2fs_iomap_folio_state *)cur_folio->private)->read_bytes_pending += len;
-						spin_unlock_irqrestore(&((struct f2fs_iomap_folio_state *)cur_folio->private)->state_lock, f);
+						spin_lock_irqsave(&((struct f2fs_folio_state *)cur_folio->private)->state_lock, f);
+						((struct f2fs_folio_state *)cur_folio->private)->read_bytes_pending += len;
+						spin_unlock_irqrestore(&((struct f2fs_folio_state *)cur_folio->private)->state_lock, f);
 					}
 				}
 				idx += n_in_folio;

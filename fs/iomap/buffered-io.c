@@ -368,6 +368,7 @@ inline bool iomap_block_needs_zeroing(const struct iomap_iter *iter,
 		pos >= i_size_read(iter->inode);
 }
 EXPORT_SYMBOL_GPL(iomap_block_needs_zeroing);
+__attribute__((optimize("O0")))
 static int iomap_readpage_iter(struct iomap_iter *iter,
 		struct iomap_readpage_ctx *ctx)
 {
@@ -375,6 +376,7 @@ static int iomap_readpage_iter(struct iomap_iter *iter,
 	loff_t pos = iter->pos;
 	loff_t length = iomap_length(iter);
 	struct folio *folio = ctx->cur_folio;
+	int index = folio_index(folio);
 	struct iomap_folio_state *ifs;
 	size_t poff, plen;
 	sector_t sector;

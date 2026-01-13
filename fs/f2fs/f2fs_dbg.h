@@ -63,7 +63,7 @@ static void noinline print_folio_private(struct folio *folio)
         printk(KERN_EMERG "folio private %p", folio->private);
         return;
     }
-    struct f2fs_iomap_folio_state *fifs=folio->private;
+    struct f2fs_folio_state *fifs=folio->private;
     if(fifs)
     {
         printk(KERN_EMERG "folio ifs write_bytes_pending: %x,read_bytes_pending: %x", atomic_read(&fifs->write_bytes_pending)
@@ -73,7 +73,7 @@ static void noinline print_folio_private(struct folio *folio)
 }
 static void print_wbp(struct folio*folio)
 {
-    struct f2fs_iomap_folio_state* fifs=folio->private;
+    struct f2fs_folio_state* fifs=folio->private;
     struct inode*inode=folio->mapping->host;
     if(fifs&&folio_order(folio)>0)
     {
@@ -82,7 +82,7 @@ static void print_wbp(struct folio*folio)
 }
 static void print_rbp(struct folio*folio)
 {
-    struct f2fs_iomap_folio_state* fifs=folio->private;
+    struct f2fs_folio_state* fifs=folio->private;
     struct inode*inode=folio->mapping->host;
     if(fifs&&folio_order(folio)>0)
     {
@@ -92,7 +92,7 @@ static void print_rbp(struct folio*folio)
 static void f2fs_list_folios_bio(struct bio *bio)
 {
     struct folio *folio;
-    struct f2fs_iomap_folio_state *fifs;
+    struct f2fs_folio_state *fifs;
     struct folio_iter fi;
     int i = 0;
 
@@ -160,7 +160,7 @@ static void inline f2fs_list_folios_cc(struct compress_ctx *cc)
 		print_folio_mapping(folio);
         #endif
         printk(KERN_EMERG "folio_page_idx:%d",folio_page_idx(folio, cc->rpages[i]));
-        struct f2fs_iomap_folio_state *fifs = folio->private;
+        struct f2fs_folio_state *fifs = folio->private;
         if(folio_order(folio) > 0 && fifs) {
             printk(KERN_EMERG "folio dirty_bytes_pending%d:",atomic_read(f2fs_ifs_dirty_bytes_pending_ptr(fifs,folio)));
         }
@@ -193,7 +193,7 @@ static void inline f2fs_list_folios_cic(struct compress_io_ctx *cc)
 		struct folio *folio = page_folio(cc->rpages[i]);
         print_folio(folio);
         printk(KERN_EMERG "folio_page_idx:%d",folio_page_idx(folio, cc->rpages[i]));
-        struct f2fs_iomap_folio_state *fifs = folio->private;
+        struct f2fs_folio_state *fifs = folio->private;
         if(folio_order(folio) > 0 && fifs) {
             printk(KERN_EMERG "folio dirty_bytes_pending%d:",atomic_read(f2fs_ifs_dirty_bytes_pending_ptr(fifs,folio)));
         }
@@ -209,7 +209,7 @@ static void inline f2fs_list_folios_cic(struct compress_io_ctx *cc)
 }
 static void f2fs_ifs_print_uptodate_status(struct folio *folio)
 {
-    struct f2fs_iomap_folio_state *fifs;
+    struct f2fs_folio_state *fifs;
     struct inode *inode;
     unsigned int nr_blocks;
     unsigned long flags;
@@ -239,7 +239,7 @@ static void f2fs_ifs_print_uptodate_status(struct folio *folio)
         return;
     }
 
-    fifs = (struct f2fs_iomap_folio_state *)folio->private;
+    fifs = (struct f2fs_folio_state *)folio->private;
     if (!fifs) {
         printk(KERN_EMERG "f2fs_ifs: fifs is NULL\n");
         return;

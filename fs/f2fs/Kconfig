@@ -150,7 +150,7 @@ config F2FS_UNFAIR_RWSEM
 	help
 	  Use unfair rw_semaphore, if system configured IO priority by block
 	  cgroup.
-config F2FS_IOMAP_FOLIO_STATE
+config f2fs_folio_state
 	bool "F2FS folio per-block I/O state tracking"
 	depends on F2FS_FS && FS_IOMAP
 	help
