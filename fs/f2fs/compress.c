@@ -76,6 +76,8 @@ bool f2fs_is_compressed_page(struct folio *folio)
 {
 	if (!folio->private)
 		return false;
+	if (folio_has_ffs(folio))
+		return false;
 	if (folio_test_f2fs_nonpointer(folio))
 		return false;
 
