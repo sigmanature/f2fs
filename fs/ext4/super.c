@@ -5221,6 +5221,8 @@ static int ext4_load_super(struct super_block *sb, ext4_fsblk_t *lsb,
 
 success:
 	sbi->s_min_folio_order = get_order(blocksize);
+	sbi->s_min_folio_order_cap = sbi->s_min_folio_order;
+	sbi->s_max_folio_order_cap = MAX_PAGECACHE_ORDER;
 	*lsb = logical_sb_block;
 	sbi->s_sbh = bh;
 	return 0;

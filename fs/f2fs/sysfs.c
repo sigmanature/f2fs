@@ -185,6 +185,50 @@ static ssize_t atgc_enabled_show(struct f2fs_attr *a,
 	return sysfs_emit(buf, "%d\n", sbi->am.atgc_enabled ? 1 : 0);
 }
 
+static ssize_t max_folio_order_cap_show(struct f2fs_attr *a,
+					struct f2fs_sb_info *sbi, char *buf)
+{
+	return sysfs_emit(buf, "%u\n", READ_ONCE(sbi->max_folio_order_cap));
+}
+
+static ssize_t max_folio_order_cap_store(struct f2fs_attr *a,
+					 struct f2fs_sb_info *sbi,
+					 const char *buf, size_t count)
+{
+	unsigned long t;
+	int ret;
+
+	ret = kstrtoul(skip_spaces(buf), 0, &t);
+	if (ret)
+		return ret;
+	if (t > 4)
+		return -EINVAL;
+	WRITE_ONCE(sbi->max_folio_order_cap, (u32)t);
+	return count;
+}
+
+static ssize_t min_folio_order_cap_show(struct f2fs_attr *a,
+					struct f2fs_sb_info *sbi, char *buf)
+{
+	return sysfs_emit(buf, "%u\n", READ_ONCE(sbi->min_folio_order_cap));
+}
+
+static ssize_t min_folio_order_cap_store(struct f2fs_attr *a,
+					 struct f2fs_sb_info *sbi,
+					 const char *buf, size_t count)
+{
+	unsigned long t;
+	int ret;
+
+	ret = kstrtoul(skip_spaces(buf), 0, &t);
+	if (ret)
+		return ret;
+	if (t > 4)
+		return -EINVAL;
+	WRITE_ONCE(sbi->min_folio_order_cap, (u32)t);
+	return count;
+}
+
 static ssize_t gc_mode_show(struct f2fs_attr *a,
 		struct f2fs_sb_info *sbi, char *buf)
 {
@@ -1304,6 +1348,14 @@ F2FS_SBI_GENERAL_RW_ATTR(warm_data_age_threshold);
 F2FS_SBI_GENERAL_RW_ATTR(last_age_weight);
 /* read extent cache */
 F2FS_SBI_GENERAL_RW_ATTR(max_read_extent_count);
+F2FS_ATTR_OFFSET(F2FS_SBI, max_folio_order_cap, 0644,
+		 max_folio_order_cap_show, max_folio_order_cap_store,
+		 offsetof(struct f2fs_sb_info, max_folio_order_cap),
+		 sizeof_field(struct f2fs_sb_info, max_folio_order_cap));
+F2FS_ATTR_OFFSET(F2FS_SBI, min_folio_order_cap, 0644,
+		 min_folio_order_cap_show, min_folio_order_cap_store,
+		 offsetof(struct f2fs_sb_info, min_folio_order_cap),
+		 sizeof_field(struct f2fs_sb_info, min_folio_order_cap));
 #ifdef CONFIG_BLK_DEV_ZONED
 F2FS_SBI_GENERAL_RO_ATTR(unusable_blocks_per_sec);
 F2FS_SBI_GENERAL_RO_ATTR(max_open_zones);
@@ -1513,6 +1565,8 @@ static struct attribute *f2fs_attrs[] = {
 	ATTR_LIST(max_atc_write_bio_size),
 	ATTR_LIST(max_fragment_chunk),
 	ATTR_LIST(max_fragment_hole),
+	ATTR_LIST(max_folio_order_cap),
+	ATTR_LIST(min_folio_order_cap),
 	ATTR_LIST(current_atomic_write),
 	ATTR_LIST(peak_atomic_write),
 	ATTR_LIST(committed_atomic_block),

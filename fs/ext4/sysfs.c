@@ -26,6 +26,8 @@ typedef enum {
 	attr_reserved_clusters,
 	attr_sra_exceeded_retry_limit,
 	attr_inode_readahead,
+	attr_min_folio_order_cap,
+	attr_max_folio_order_cap,
 	attr_trigger_test_error,
 	attr_first_error_time,
 	attr_last_error_time,
@@ -96,6 +98,48 @@ static ssize_t inode_readahead_blks_store(struct ext4_sb_info *sbi,
 		return -EINVAL;
 
 	sbi->s_inode_readahead_blks = t;
+	return count;
+}
+
+static ssize_t min_folio_order_cap_show(struct ext4_sb_info *sbi, char *buf)
+{
+	return sysfs_emit(buf, "%u\n", READ_ONCE(sbi->s_min_folio_order_cap));
+}
+
+static ssize_t min_folio_order_cap_store(struct ext4_sb_info *sbi,
+					 const char *buf, size_t count)
+{
+	unsigned long t;
+	int ret;
+
+	ret = kstrtoul(skip_spaces(buf), 0, &t);
+	if (ret)
+		return ret;
+	if (t > MAX_PAGECACHE_ORDER)
+		return -EINVAL;
+
+	WRITE_ONCE(sbi->s_min_folio_order_cap, (u16)t);
+	return count;
+}
+
+static ssize_t max_folio_order_cap_show(struct ext4_sb_info *sbi, char *buf)
+{
+	return sysfs_emit(buf, "%u\n", READ_ONCE(sbi->s_max_folio_order_cap));
+}
+
+static ssize_t max_folio_order_cap_store(struct ext4_sb_info *sbi,
+					 const char *buf, size_t count)
+{
+	unsigned long t;
+	int ret;
+
+	ret = kstrtoul(skip_spaces(buf), 0, &t);
+	if (ret)
+		return ret;
+	if (t > MAX_PAGECACHE_ORDER)
+		return -EINVAL;
+
+	WRITE_ONCE(sbi->s_max_folio_order_cap, (u16)t);
 	return count;
 }
 
@@ -241,6 +285,8 @@ EXT4_ATTR_FUNC(session_write_kbytes, 0444);
 EXT4_ATTR_FUNC(lifetime_write_kbytes, 0444);
 EXT4_ATTR_FUNC(reserved_clusters, 0644);
 EXT4_ATTR_FUNC(sra_exceeded_retry_limit, 0444);
+EXT4_ATTR_FUNC(min_folio_order_cap, 0644);
+EXT4_ATTR_FUNC(max_folio_order_cap, 0644);
 
 EXT4_ATTR_OFFSET(inode_readahead_blks, 0644, inode_readahead,
 		 ext4_sb_info, s_inode_readahead_blks);
@@ -298,6 +344,8 @@ static struct attribute *ext4_attrs[] = {
 	ATTR_LIST(lifetime_write_kbytes),
 	ATTR_LIST(reserved_clusters),
 	ATTR_LIST(sra_exceeded_retry_limit),
+	ATTR_LIST(min_folio_order_cap),
+	ATTR_LIST(max_folio_order_cap),
 	ATTR_LIST(inode_readahead_blks),
 	ATTR_LIST(inode_goal),
 	ATTR_LIST(mb_stats),
@@ -483,6 +531,10 @@ static ssize_t ext4_attr_show(struct kobject *kobj,
 		return print_tstamp(buf, sbi->s_es, s_last_error_time);
 	case attr_journal_task:
 		return journal_task_show(sbi, buf);
+	case attr_min_folio_order_cap:
+		return min_folio_order_cap_show(sbi, buf);
+	case attr_max_folio_order_cap:
+		return max_folio_order_cap_show(sbi, buf);
 	default:
 		return ext4_generic_attr_show(a, sbi, buf);
 	}
@@ -555,6 +607,10 @@ static ssize_t ext4_attr_store(struct kobject *kobj,
 	switch (a->attr_id) {
 	case attr_reserved_clusters:
 		return reserved_clusters_store(sbi, buf, len);
+	case attr_min_folio_order_cap:
+		return min_folio_order_cap_store(sbi, buf, len);
+	case attr_max_folio_order_cap:
+		return max_folio_order_cap_store(sbi, buf, len);
 	case attr_inode_readahead:
 		return inode_readahead_blks_store(sbi, buf, len);
 	case attr_trigger_test_error:
@@ -695,4 +751,3 @@ void ext4_exit_sysfs(void)
 	remove_proc_entry(proc_dirname, NULL);
 	ext4_proc_root = NULL;
 }
-

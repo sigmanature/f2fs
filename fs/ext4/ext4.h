@@ -1695,6 +1695,10 @@ struct ext4_sb_info {
 	u16 s_min_folio_order;
 	/* supported maximum folio order, 0 means not supported */
 	u16 s_max_folio_order;
+	/* sysfs cap for minimum folio order */
+	u16 s_min_folio_order_cap;
+	/* sysfs cap for maximum folio order */
+	u16 s_max_folio_order_cap;
 
 	/* Precomputed FS UUID checksum for seeding other checksums */
 	__u32 s_csum_seed;

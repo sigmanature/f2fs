@@ -5028,6 +5028,8 @@ try_onemore:
 		return -ENOMEM;
 
 	sbi->sb = sb;
+	sbi->max_folio_order_cap = 2;
+	sbi->min_folio_order_cap = 2;
 
 	/* initialize locks within allocated memory */
 	init_f2fs_rwsem_trace(&sbi->gc_lock, sbi, LOCK_NAME_GC_LOCK);

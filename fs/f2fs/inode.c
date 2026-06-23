@@ -629,10 +629,7 @@ make_now:
 		inode->i_op = &f2fs_file_inode_operations;
 		inode->i_fop = &f2fs_file_operations;
 		inode->i_mapping->a_ops = &f2fs_dblock_aops;
-		if (!f2fs_has_inline_data(inode) &&
-		    (!f2fs_encrypted_file(inode) ||
-		     (inode->i_sb->s_flags & SB_INLINECRYPT)))
-			mapping_set_folio_min_order(inode->i_mapping, 0);
+		f2fs_set_inode_mapping_order(inode);
 	} else if (S_ISDIR(inode->i_mode)) {
 		inode->i_op = &f2fs_dir_inode_operations;
 		inode->i_fop = &f2fs_dir_operations;

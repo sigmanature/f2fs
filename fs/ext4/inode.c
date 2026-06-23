@@ -5215,6 +5215,10 @@ void ext4_set_inode_mapping_order(struct inode *inode)
 	if (ext4_test_inode_flag(inode, EXT4_INODE_JOURNAL_DATA))
 		max_order = min_order;
 
+	min_order = max_t(u16, min_order, EXT4_SB(sb)->s_min_folio_order_cap);
+	max_order = min_t(u16, max_order, EXT4_SB(sb)->s_max_folio_order_cap);
+	min_order = min(min_order, max_order);
+
 	mapping_set_folio_order_range(inode->i_mapping, min_order, max_order);
 }
 

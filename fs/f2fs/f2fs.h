@@ -1941,6 +1941,8 @@ struct f2fs_sb_info {
 	unsigned int migration_granularity;
 	/* migration window granularity of garbage collection, unit: segment */
 	unsigned int migration_window_granularity;
+	u32 max_folio_order_cap;	/* clamp regular-file mapping max order */
+	u32 min_folio_order_cap;	/* clamp regular-file mapping min order */
 
 	/*
 	 * for stat information.
@@ -5130,6 +5132,55 @@ static inline bool f2fs_quota_file(struct f2fs_sb_info *sbi, nid_t ino)
 	}
 #endif
 	return false;
+}
+
+static inline bool f2fs_large_folio_feature_enabled(void)
+{
+	return IS_ENABLED(CONFIG_F2FS_LARGE_FOLIO);
+}
+
+static inline bool f2fs_inode_may_use_large_folio(struct inode *inode)
+{
+	if (!f2fs_large_folio_feature_enabled())
+		return false;
+
+	if (!S_ISREG(inode->i_mode))
+		return false;
+
+	if (f2fs_has_inline_data(inode))
+		return false;
+
+	if (f2fs_compressed_file(inode))
+		return false;
+
+	if (f2fs_encrypted_file(inode) &&
+	    !(inode->i_sb->s_flags & SB_INLINECRYPT))
+		return false;
+
+	if (fsverity_active(inode))
+		return false;
+
+	if (file_is_verity(inode))
+		return false;
+
+	if (f2fs_quota_file(F2FS_I_SB(inode), inode->i_ino))
+		return false;
+	return true;
+}
+
+static inline void f2fs_set_inode_mapping_order(struct inode *inode)
+{
+	unsigned int min_order;
+	unsigned int max_order;
+
+	if (!f2fs_inode_may_use_large_folio(inode))
+		return;
+
+	min_order = READ_ONCE(F2FS_I_SB(inode)->min_folio_order_cap);
+	max_order = min_t(unsigned int, 4,
+			  READ_ONCE(F2FS_I_SB(inode)->max_folio_order_cap));
+	min_order = min(min_order, max_order);
+	mapping_set_folio_order_range(inode->i_mapping, min_order, max_order);
 }
 
 static inline bool f2fs_block_unit_discard(struct f2fs_sb_info *sbi)
