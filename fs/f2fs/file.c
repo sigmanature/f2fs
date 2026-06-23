@@ -2210,6 +2210,9 @@ static int f2fs_setflags_common(struct inode *inode, u32 iflags, u32 mask)
 			if (!f2fs_disable_compressed_file(inode))
 				return -EINVAL;
 		} else {
+			if (f2fs_large_folio_feature_enabled())
+				return -EOPNOTSUPP;
+
 			/* try to convert inline_data to support compression */
 			int err = f2fs_convert_inline_inode(inode);
 			if (err)
